@@ -385,6 +385,26 @@
     fill: none;
     opacity: 0.7;
   }
+
+  .edit-port {
+    fill: #fff;
+    stroke: var(--accent);
+    stroke-width: 2.5;
+    cursor: pointer;
+    pointer-events: all;
+  }
+  .edit-port.selected {
+    fill: var(--accent);
+    stroke: #fff;
+    stroke-width: 2;
+  }
+  .edit-port-label {
+    fill: var(--accent);
+    font-size: 9px;
+    font-weight: 700;
+    pointer-events: none;
+  }
+  .ports-layer { pointer-events: all; }
   @media print {
     .edit-bar { display: none !important; }
   }
@@ -431,16 +451,20 @@
 
   <div class="edit-bar" id="edit-bar" role="toolbar" aria-label="Schematic edit tools">
     <strong>Edit</strong>
-    <button type="button" id="btn-edit-toggle" class="active" title="Enable right-click move + connect">Edit mode ON</button>
-    <button type="button" id="btn-connect-mode">Connect lines</button>
+    <button type="button" id="btn-edit-toggle" class="active" title="Toggle edit mode">Edit mode ON</button>
+    <button type="button" id="btn-tool-move" class="active" data-tool="move">Move parts</button>
+    <button type="button" id="btn-tool-addport" data-tool="addport">Add connection point</button>
+    <button type="button" id="btn-tool-moveport" data-tool="moveport">Move points</button>
+    <button type="button" id="btn-tool-connect" data-tool="connect">Connect points</button>
     <label>Snap
       <input id="snap-size" type="number" min="1" max="50" value="10" style="width:3.5rem" />
       px
     </label>
     <button type="button" id="btn-clear-links">Clear my lines</button>
+    <button type="button" id="btn-clear-ports">Clear points</button>
     <button type="button" id="btn-reset-layout">Reset positions</button>
     <button type="button" id="btn-save-layout">Save layout</button>
-    <span class="hint">Right-click equipment to grab · drag · release to snap. In Connect mode, left-click part A then part B to draw a line. Right-click a line to delete it.</span>
+    <span class="hint" id="edit-hint">Edit mode: right-click a part to grab, drag, release to snap. Use the tools to add/move connection points and wire them.</span>
   </div>
 
   <div class="legend" aria-label="Fluid legend">
@@ -942,7 +966,7 @@
   <!-- ========== DIAGRAM 4 (interactive) ========== -->
   <section class="diag-section" id="d4">
     <h2>Diagram 4 — Transfer, wash &amp; flush</h2>
-    <p class="desc">Interactive valves · Backwash interlocks with process feed (V-FWD / V-SW-NORM) · Mix ratio 2 SW : 1 sewage. Click any valve; inactive pipes dim; beads follow open paths.</p>
+    <p class="desc">Interactive valves on the complete interconnected plant · Single V-2 tank · Chlorine peri into V-2 · Dechlor peri into the gravity pump · Backwash interlocks with process feed · Mix 2 SW : 1 sewage.</p>
 
     <div class="steps" id="steps-d4" aria-label="Diagram 4 operating steps">
       <h3>Operating steps — transfer / wash / flush</h3>
@@ -951,10 +975,10 @@
           <span class="why">Why: presets set the valve interlocks; you can still click any valve to what-if a lineup.</span></li>
         <li><strong>Step 2 — Process lineup (typical).</strong> Open V-SW-NORM + V-FWD (+ often V1-MID and V-REC): SW and macerated sewage meet 2:1, through bookcell; backwash BC-FLUSH stays closed.
           <span class="why">Why: BC-FLUSH interlocks against process feed so you cannot forward-feed and reverse-flush at once.</span></li>
-        <li><strong>Step 3 — Transfer / tank moves.</strong> Use V-U (V-2A↔V-2B), V1/V2 suction valves to the macerator manifold, and MAC-V2 / V-REC as needed for moves and recirculation.
-          <span class="why">Why: Diagram 4 is the rehearsal board for transfers without guessing pipe routes.</span></li>
-        <li><strong>Step 4 — Wash sprays.</strong> Open V-SW-V1 / V-SW-V2A / V-SW-V2B to spray seawater into tanks while watching bead paths.
-          <span class="why">Why: confirms wash water source and which tank interiors are being rinsed.</span></li>
+        <li><strong>Step 3 — Chemical dosing.</strong> Chlorine peri (CL-PERI) feeds V-2; dechlor peri (DECHLOR-PERI) feeds the gravity pump suction.
+          <span class="why">Why: raise Cl₂ in the single V-2 hold tank, then quench residual at the discharge pump.</span></li>
+        <li><strong>Step 4 — Transfer / wash.</strong> Use V1/V2 suction to the macerator manifold, MAC-V2 / V-REC for moves, and V-SW-V1 / V-SW-V2 sprays.
+          <span class="why">Why: one V-2 tank — no A/B split or U-line.</span></li>
         <li><strong>Step 5 — Backwash the bookcell.</strong> Press <em>Backwash mode</em> (opens BC-FLUSH, closes process feed). Confirm inactive pipes dim and only flush beads move.
           <span class="why">Why: reverse flush clears the cell without sending sewage forward.</span></li>
         <li><strong>Step 6 — Treated overboard.</strong> Open V-GRAV and V-GRAV-OUT for gravity discharge (blue). Keep MAC-OUT / V1-TOP-DRN / V-OVF closed unless intentionally showing untreated (red) paths.
@@ -1008,22 +1032,21 @@
 
   var VALVE_KEY = [
     { id: "V-SW-V1", name: "SW → V-1", desc: "Seawater spray to V-1" },
-    { id: "V-SW-V2A", name: "SW → V-2A", desc: "Seawater spray to V-2A" },
-    { id: "V-SW-V2B", name: "SW → V-2B", desc: "Seawater spray to V-2B" },
+    { id: "V-SW-V2", name: "SW → V-2", desc: "Seawater spray to single V-2" },
     { id: "BC-FLUSH", name: "Bookcell backwash", desc: "Reverse flush (interlocks process feed)" },
     { id: "V-SW-NORM", name: "SW to mix", desc: "Seawater to mix tee / bookcell" },
     { id: "V1-MID", name: "V-1 +1′ suction", desc: "V-1 mid suction to macerator" },
     { id: "V1-BOT", name: "V-1 bottom suction", desc: "V-1 bottom suction to macerator" },
-    { id: "V2A-SUCT", name: "V-2A suction", desc: "V-2A to macerator suction" },
-    { id: "V2B-SUCT", name: "V-2B suction", desc: "V-2B to macerator suction" },
+    { id: "V2-SUCT", name: "V-2 suction", desc: "V-2 bottom to macerator suction" },
     { id: "V-REC", name: "Mac recirculation", desc: "Macerator return to V-1" },
     { id: "V-FWD", name: "Mac to bookcell", desc: "Macerator to mix / bookcell" },
-    { id: "MAC-V2", name: "Mac to V-2", desc: "Macerator direct to V-2A" },
+    { id: "MAC-V2", name: "Mac to V-2", desc: "Macerator direct to V-2" },
     { id: "MAC-OUT", name: "Mac overboard", desc: "Untreated overboard (red)" },
     { id: "V1-TOP-DRN", name: "V-1 top drain", desc: "Emergency untreated overboard (red)" },
-    { id: "V-U", name: "V-2 U-line", desc: "V-2A to V-2B transfer" },
-    { id: "V-OVF", name: "Overflow pressure", desc: "V-2B untreated overflow (red)" },
-    { id: "V-GRAV", name: "Gravity suction", desc: "V-2B to gravity pump" },
+    { id: "V-OVF", name: "Overflow pressure", desc: "V-2 untreated overflow (red)" },
+    { id: "CL-PERI", name: "Chlorine peri", desc: "Chlorine pump dosing into V-2" },
+    { id: "DECHLOR-PERI", name: "Dechlor peri", desc: "Dechlorination pump into gravity pump" },
+    { id: "V-GRAV", name: "Gravity suction", desc: "V-2 to gravity pump" },
     { id: "V-GRAV-OUT", name: "Gravity overboard", desc: "Treated discharge (blue)" }
   ];
 
@@ -1031,19 +1054,18 @@
     "V-SW-NORM": true,
     "BC-FLUSH": false,
     "V-SW-V1": false,
-    "V-SW-V2A": false,
-    "V-SW-V2B": false,
+    "V-SW-V2": false,
     "V1-BOT": false,
     "V1-MID": true,
-    "V2A-SUCT": false,
-    "V2B-SUCT": false,
+    "V2-SUCT": false,
     "V-FWD": true,
     "V-REC": true,
     "MAC-V2": false,
     "MAC-OUT": false,
     "V1-TOP-DRN": true,
-    "V-U": true,
     "V-OVF": true,
+    "CL-PERI": true,
+    "DECHLOR-PERI": true,
     "V-GRAV": true,
     "V-GRAV-OUT": true
   };
@@ -1094,10 +1116,8 @@
   };
   var pump = { x: v2.x + v2.w + 40, y: deck - 56, w: 78, h: 44 };
   var outChestX = 1520;
-  var v2PlateX = v2.x + v2.w * 0.5;
   var recircY = v1.top + 52;
-  var v2ABotX = v2.x + v2.w * 0.25;
-  var v2BBotX = v2.x + v2.w * 0.75;
+  var v2BotX = v2.x + v2.w * 0.5;
   var v1BotY = v1.bot;
   var v1MidY = v1.bot - ft;
   var leaveY = v2.top - ft * 0.5;
@@ -1108,13 +1128,12 @@
   var swMidY = sw.y + sw.h / 2;
   var underY = deck + 28;
   var underTop = underY + 78;
-  var swValvePitch = 28;
+  var swValvePitch = 32;
   var swV = {
     v1: swPanel.y + 38,
-    v2b: swPanel.y + 38 + swValvePitch,
-    v2a: swPanel.y + 38 + swValvePitch * 2,
-    flush: swPanel.y + 38 + swValvePitch * 3,
-    norm: swPanel.y + 38 + swValvePitch * 4
+    v2: swPanel.y + 38 + swValvePitch,
+    flush: swPanel.y + 38 + swValvePitch * 2,
+    norm: swPanel.y + 38 + swValvePitch * 3
   };
   var swManTop = swV.v1 - 10;
   var swManBot = swV.norm + 10;
@@ -1122,14 +1141,12 @@
   var macV = {
     mid: v1.bot - ft,
     bot: v1.bot,
-    v2a: v1.bot + 28,
-    v2b: v1.bot + 54
+    v2: v1.bot + 36
   };
   var macManTop = macCollectY - 6;
-  var macManBot = macV.v2b + 10;
+  var macManBot = macV.v2 + 10;
   var macLaneR = {
-    v2a: macPanel.x + macPanel.w - 10,
-    v2b: macPanel.x + macPanel.w - 28
+    v2: macPanel.x + macPanel.w - 16
   };
   var v1MidValveX = macManX - 22;
   var v1BotValveX = macManX - 22;
@@ -1140,18 +1157,13 @@
   var v1RecircInX = v1.x + v1.w;
   var v1TopDrnY = v1.top + 10;
   var sewageInX = v1.x + 28;
-  var v2ASprayX0 = v2.x + 16;
-  var v2ASprayX1 = v2PlateX - 16;
-  var v2BSprayX0 = v2PlateX + 16;
-  var v2BSprayX1 = v2.x + v2.w - 16;
+  var v2SprayX0 = v2.x + 24;
+  var v2SprayX1 = v2.x + v2.w - 24;
   var v2SprayY = v2.top + 22;
   var v2MacInX = v2.x + 100;
   var v2GravOutX = v2.x + v2.w - 18;
-  var uFromX = v2PlateX - 18;
-  var uToX = v2PlateX + 18;
-  var v2UTopY = v2.top - ft * 0.85;
-  var v2BSprayInX = uToX + 32;
-  var v2OvfX = (v2BSprayInX + v2GravOutX) / 2;
+  var v2ClInX = v2.x + v2.w * 0.55;
+  var v2OvfX = v2.x + v2.w * 0.72;
   var bcProcessInY = bc.bot - 18;
   var bcSharedTopX = bc.x + bc.w * 0.45;
   var bcRightX = bc.x + bc.w;
@@ -1161,6 +1173,12 @@
   var swBranchRightX = swPanel.x + swPanel.w - 6;
   var swBranchLeftX = swPanel.x + 6;
   var keyY = hull + 48;
+
+  // Chemical pumps
+  var clTank = { x: v2.x + 36, y: v2.top - 118, w: 92, h: 58 };
+  var clPeri = { x: clTank.x + 18, y: clTank.y + clTank.h + 6, w: 56, h: 26 };
+  var deTank = { x: pump.x - 8, y: pump.y - 118, w: 92, h: 58 };
+  var dePeri = { x: deTank.x + 18, y: deTank.y + deTank.h + 6, w: 56, h: 26 };
 
   var PATHS = {
     chestToSw: "M " + (swChest.x + swChest.w / 2) + " " + swChest.y + " V " + (sw.y + sw.h),
@@ -1174,19 +1192,18 @@
     mixThruBc: "M " + mixX + " " + mixY + " H " + (bc.x - 12) + " V " + bcProcessInY + " H " + bc.x + " H " + bcSharedTopX + " V " + bcTop + " H " + (bcRightX + 8) + " V " + v2SideInY + " H " + v2.x,
     flush: "M " + swManX + " " + swV.flush + " H " + swBranchRightX + " H " + bcSharedTopX + " V " + bcTop + " V " + bcBot + " H " + (bcRightX + 8) + " V " + v2SideInY + " H " + v2.x,
     swToV1: "M " + swManX + " " + swV.v1 + " H " + swBranchLeftX + " H " + v1SprayInX + " V " + v1.top + " V " + v1SprayY,
-    swToV2A: "M " + swManX + " " + swV.v2a + " H " + swBranchRightX + " H " + ((v2ASprayX0 + v2ASprayX1) / 2) + " V " + v2.top + " V " + v2SprayY,
-    swToV2B: "M " + swManX + " " + swV.v2b + " H " + swBranchRightX + " H " + v2BSprayInX + " V " + v2.top + " V " + v2SprayY,
+    swToV2: "M " + swManX + " " + swV.v2 + " H " + swBranchRightX + " H " + ((v2SprayX0 + v2SprayX1) / 2) + " V " + v2.top + " V " + v2SprayY,
     v1Mid: "M " + (v1.x + v1.w) + " " + v1MidY + " H " + v1MidValveX + " H " + macManX,
     v1Bot: "M " + (v1.x + v1.w) + " " + v1BotY + " H " + v1BotValveX + " H " + macManX,
-    v2ASuct: "M " + v2ABotX + " " + v2.bot + " V " + (underY + 14) + " H " + macLaneR.v2a + " V " + macV.v2a + " H " + macManX,
-    v2BSuct: "M " + v2BBotX + " " + v2.bot + " V " + (underY + 38) + " H " + macLaneR.v2b + " V " + macV.v2b + " H " + macManX,
+    v2Suct: "M " + v2BotX + " " + v2.bot + " V " + (underY + 22) + " H " + macLaneR.v2 + " V " + macV.v2 + " H " + macManX,
     macCollect: "M " + macManX + " " + macCollectY + " V " + macSuctInY + " H " + macSuctInX,
     v1TopDrn: "M " + (v1.x + v1.w) + " " + v1TopDrnY + " H " + v1DrainDropX + " V " + underTop + " H " + outChestX + " V " + (hull - 8),
-    v2U: "M " + uFromX + " " + v2.top + " V " + v2UTopY + " H " + uToX + " V " + v2.top,
     ovf: "M " + v2OvfX + " " + v2.top + " V " + ovfY + " H " + outChestX + " V " + (hull - 8),
     v2toGrav: "M " + v2GravOutX + " " + v2.top + " V " + leaveY + " H " + (pump.x - 18) + " V " + pumpInY + " H " + pump.x,
     gravToOut: "M " + pumpOutX + " " + pumpInY + " H " + (outChestX - 10) + " V " + (hull - 8),
-    sewageIn: "M " + sewageInX + " " + (v1.top - 36) + " V " + v1.top
+    sewageIn: "M " + sewageInX + " " + (v1.top - 36) + " V " + v1.top,
+    clToV2: "M " + (clPeri.x + clPeri.w / 2) + " " + (clPeri.y + clPeri.h) + " V " + (v2.top - 4) + " V " + v2.top,
+    dechlorToGrav: "M " + (dePeri.x + dePeri.w / 2) + " " + (dePeri.y + dePeri.h) + " V " + (pump.y - 8) + " H " + (pump.x + pump.w / 2) + " V " + pump.y
   };
 
   function orthoPathLen(d) {
@@ -1327,7 +1344,7 @@
 
     scene.appendChild(rect(28, 6, 980, 56, { rx: 6, fill: "var(--fill-tertiary)", stroke: "var(--soft)", sw: 1 }));
     scene.appendChild(text(44, 30, "Transfer, wash & flush schematic", { size: 17, weight: 700 }));
-    scene.appendChild(text(44, 50, "Interactive valves · Backwash interlocks with process feed · Mix 2 SW : 1 sewage", { size: 12, fill: "var(--mute)", weight: 500 }));
+    scene.appendChild(text(44, 50, "Single V-2 · Cl peri → V-2 · Dechlor peri → gravity pump · Mix 2 SW : 1 sewage", { size: 12, fill: "var(--mute)", weight: 500 }));
 
     scene.appendChild(circle(780, 22, 6, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke }));
     scene.appendChild(text(792, 26, "Seawater / treated", { size: 11, weight: 600 }));
@@ -1374,8 +1391,7 @@
     scene.appendChild(text(mac.x + mac.w / 2, mac.y + 36, "Macerator", { size: 14, weight: 700, anchor: "middle" }));
     scene.appendChild(circle(macSuctInX, macSuctInY, 4, {}));
     scene.appendChild(circle(macOutX, macInY, 4, {}));
-    scene.appendChild(line(macLaneR.v2b, macV.v2a - 8, macLaneR.v2b, macV.v2b + 8, { stroke: "var(--soft)", sw: 1, dash: "2 3", opacity: 0.4 }));
-    scene.appendChild(line(macLaneR.v2a, macV.v2a - 8, macLaneR.v2a, macV.v2b + 8, { stroke: "var(--soft)", sw: 1, dash: "2 3", opacity: 0.4 }));
+    scene.appendChild(line(macLaneR.v2, macV.v2 - 8, macLaneR.v2, macV.v2 + 8, { stroke: "var(--soft)", sw: 1, dash: "2 3", opacity: 0.4 }));
 
     scene.appendChild(rect(macOutPanel.x, macOutPanel.y, macOutPanel.w, macOutPanel.h, { rx: 6, fill: "var(--fill-tertiary)", stroke: FLUID.sewage.stroke, sw: 1.5 }));
     scene.appendChild(text(macOutPanel.x + 6, macOutPanel.y + 18, "Mac discharge", { size: 11, fill: FLUID.sewage.fill, weight: 700 }));
@@ -1400,26 +1416,35 @@
     scene.appendChild(circle(bcSharedTopX, bcTop, 4, { stroke: "var(--accent)" }));
 
     scene.appendChild(rect(v2.x, v2.top, v2.w, v2.bot - v2.top, { rx: 4 }));
-    scene.appendChild(line(v2PlateX, v2.top + 2, v2PlateX, v2.bot - 2, { stroke: "var(--ink)", sw: 4 }));
-    scene.appendChild(text((v2.x + v2PlateX) / 2, v2.top + 56, "V-2A", { size: 16, weight: 700, anchor: "middle" }));
-    scene.appendChild(text((v2PlateX + v2.x + v2.w) / 2, v2.top + 56, "V-2B", { size: 16, weight: 700, anchor: "middle" }));
-    scene.appendChild(line(v2ASprayX0, v2SprayY, v2ASprayX1, v2SprayY, { stroke: FLUID.seawater.stroke, sw: 2 }));
-    scene.appendChild(line(v2BSprayX0, v2SprayY, v2BSprayX1, v2SprayY, { stroke: FLUID.seawater.stroke, sw: 2 }));
-    for (i = 0; i < 3; i++) {
-      scene.appendChild(line(v2ASprayX0 + 14 + i * 24, v2SprayY, v2ASprayX0 + 14 + i * 24, v2SprayY + 8, { stroke: FLUID.seawater.stroke, sw: 1.4 }));
-      scene.appendChild(line(v2BSprayX0 + 12 + i * 20, v2SprayY, v2BSprayX0 + 12 + i * 20, v2SprayY + 8, { stroke: FLUID.seawater.stroke, sw: 1.4 }));
+    scene.appendChild(text(v2.x + v2.w / 2, v2.top + 56, "V-2", { size: 18, weight: 700, anchor: "middle" }));
+    scene.appendChild(text(v2.x + v2.w / 2, v2.top + 78, "single hold / treat tank", { size: 12, fill: "var(--mute)", weight: 500, anchor: "middle" }));
+    scene.appendChild(line(v2SprayX0, v2SprayY, v2SprayX1, v2SprayY, { stroke: FLUID.seawater.stroke, sw: 2 }));
+    for (i = 0; i < 6; i++) {
+      scene.appendChild(line(v2SprayX0 + 18 + i * 48, v2SprayY, v2SprayX0 + 18 + i * 48, v2SprayY + 8, { stroke: FLUID.seawater.stroke, sw: 1.4 }));
     }
     scene.appendChild(circle(v2.x, v2SideInY, 4, { stroke: "var(--accent)" }));
     scene.appendChild(circle(v2MacInX, v2.top, 4, { fill: FLUID.sewage.fill, stroke: FLUID.sewage.stroke }));
-    scene.appendChild(circle(uFromX, v2.top, 4, {}));
-    scene.appendChild(circle(uToX, v2.top, 4, {}));
-    scene.appendChild(circle(v2BSprayInX, v2.top, 4, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke }));
+    scene.appendChild(circle(v2ClInX, v2.top, 4, { fill: "#F87171", stroke: "#DC2626" }));
     scene.appendChild(circle(v2OvfX, v2.top, 4, { fill: FLUID.untreated.fill, stroke: FLUID.untreated.stroke }));
     scene.appendChild(circle(v2GravOutX, v2.top, 4, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke }));
-    scene.appendChild(circle((v2ASprayX0 + v2ASprayX1) / 2, v2.top, 3.5, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke, sw: 1.2 }));
-    scene.appendChild(circle(v2ABotX, v2.bot, 4, {}));
-    scene.appendChild(circle(v2BBotX, v2.bot, 4, {}));
-    scene.appendChild(text((uFromX + uToX) / 2, v2UTopY - 8, "U-line", { size: 12, weight: 700, anchor: "middle" }));
+    scene.appendChild(circle((v2SprayX0 + v2SprayX1) / 2, v2.top, 3.5, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke, sw: 1.2 }));
+    scene.appendChild(circle(v2BotX, v2.bot, 4, {}));
+
+    // Chlorine peri → V-2
+    scene.appendChild(rect(clTank.x, clTank.y, clTank.w, clTank.h, { rx: 4, fill: "var(--fill-tertiary)", stroke: "#DC2626", sw: 2 }));
+    scene.appendChild(text(clTank.x + clTank.w / 2, clTank.y + 22, "5 gal", { size: 12, weight: 700, anchor: "middle" }));
+    scene.appendChild(text(clTank.x + clTank.w / 2, clTank.y + 40, "Chlorine 7%", { size: 12, fill: "#DC2626", weight: 700, anchor: "middle" }));
+    scene.appendChild(rect(clPeri.x, clPeri.y, clPeri.w, clPeri.h, { rx: 3, stroke: "#DC2626", sw: 1.6 }));
+    scene.appendChild(text(clPeri.x + clPeri.w / 2, clPeri.y + 17, "Cl peri", { size: 11, fill: "#DC2626", weight: 700, anchor: "middle" }));
+    scene.appendChild(text(clTank.x + clTank.w / 2, clTank.y - 8, "→ V-2", { size: 11, fill: "var(--mute)", weight: 600, anchor: "middle" }));
+
+    // Dechlor peri → gravity pump
+    scene.appendChild(rect(deTank.x, deTank.y, deTank.w, deTank.h, { rx: 4, fill: "var(--fill-tertiary)", stroke: "#16A34A", sw: 2 }));
+    scene.appendChild(text(deTank.x + deTank.w / 2, deTank.y + 22, "5 gal", { size: 12, weight: 700, anchor: "middle" }));
+    scene.appendChild(text(deTank.x + deTank.w / 2, deTank.y + 40, "20% dechlor", { size: 12, fill: "#16A34A", weight: 700, anchor: "middle" }));
+    scene.appendChild(rect(dePeri.x, dePeri.y, dePeri.w, dePeri.h, { rx: 3, stroke: "#16A34A", sw: 1.6 }));
+    scene.appendChild(text(dePeri.x + dePeri.w / 2, dePeri.y + 17, "Dechlor", { size: 11, fill: "#16A34A", weight: 700, anchor: "middle" }));
+    scene.appendChild(text(deTank.x + deTank.w / 2, deTank.y - 8, "→ gravity pump", { size: 11, fill: "var(--mute)", weight: 600, anchor: "middle" }));
 
     var gravPump = rect(pump.x, pump.y, pump.w, pump.h, { rx: 3, stroke: "var(--mute)", sw: 2 });
     gravPump.setAttribute("id", "grav-pump");
@@ -1546,16 +1571,15 @@
     flowsG.appendChild(flowSeg(PATHS.mixThruBc, mixThruOn, FLUID.sewage.stroke));
     flowsG.appendChild(flowSeg(PATHS.flush, open("BC-FLUSH"), FLUID.seawater.stroke));
     flowsG.appendChild(flowSeg(PATHS.swToV1, open("V-SW-V1"), FLUID.seawater.stroke));
-    flowsG.appendChild(flowSeg(PATHS.swToV2A, open("V-SW-V2A"), FLUID.seawater.stroke));
-    flowsG.appendChild(flowSeg(PATHS.swToV2B, open("V-SW-V2B"), FLUID.seawater.stroke));
+    flowsG.appendChild(flowSeg(PATHS.swToV2, open("V-SW-V2"), FLUID.seawater.stroke));
     flowsG.appendChild(flowSeg(PATHS.v1Bot, open("V1-BOT"), FLUID.sewage.stroke));
     flowsG.appendChild(flowSeg(PATHS.v1Mid, open("V1-MID"), FLUID.sewage.stroke));
-    flowsG.appendChild(flowSeg(PATHS.v2ASuct, open("V2A-SUCT"), FLUID.sewage.stroke));
-    flowsG.appendChild(flowSeg(PATHS.v2BSuct, open("V2B-SUCT"), FLUID.sewage.stroke));
-    flowsG.appendChild(flowSeg(PATHS.macCollect, open("V1-BOT") || open("V1-MID") || open("V2A-SUCT") || open("V2B-SUCT"), "var(--ink)"));
-    flowsG.appendChild(flowSeg(PATHS.v2U, open("V-U"), FLUID.seawater.stroke));
+    flowsG.appendChild(flowSeg(PATHS.v2Suct, open("V2-SUCT"), FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.macCollect, open("V1-BOT") || open("V1-MID") || open("V2-SUCT"), "var(--ink)"));
     flowsG.appendChild(flowSeg(PATHS.v1TopDrn, open("V1-TOP-DRN"), FLUID.untreated.stroke));
     flowsG.appendChild(flowSeg(PATHS.ovf, open("V-OVF"), FLUID.untreated.stroke));
+    flowsG.appendChild(flowSeg(PATHS.clToV2, open("CL-PERI"), "#DC2626"));
+    flowsG.appendChild(flowSeg(PATHS.dechlorToGrav, open("DECHLOR-PERI"), "#16A34A"));
     flowsG.appendChild(flowSeg(PATHS.v2toGrav, open("V-GRAV"), FLUID.seawater.stroke));
     flowsG.appendChild(flowSeg(PATHS.gravToOut, open("V-GRAV") && open("V-GRAV-OUT"), FLUID.seawater.stroke));
 
@@ -1591,18 +1615,17 @@
 
     beads(open("BC-FLUSH"), PATHS.flush, evenStarts(3, 2.0), 5.5, FLUID.seawater.fill);
     beads(open("V-SW-V1"), PATHS.swToV1, evenStarts(2, 2.0), 4.0, FLUID.seawater.fill);
-    beads(open("V-SW-V2A"), PATHS.swToV2A, evenStarts(2, 2.2), 4.5, FLUID.seawater.fill);
-    beads(open("V-SW-V2B"), PATHS.swToV2B, evenStarts(2, 2.4), 4.8, FLUID.seawater.fill);
+    beads(open("V-SW-V2"), PATHS.swToV2, evenStarts(2, 2.2), 4.5, FLUID.seawater.fill);
     beads(open("V1-BOT"), PATHS.v1Bot, evenStarts(2, 2.0), 3.8, FLUID.solids.fill, FLUID.sewage.stroke);
     beads(open("V1-MID"), PATHS.v1Mid, evenStarts(2, 2.2), 3.8, FLUID.sewage.fill);
-    beads(open("V2A-SUCT"), PATHS.v2ASuct, evenStarts(2, 2.4), 5.5, FLUID.sewage.fill);
-    beads(open("V2B-SUCT"), PATHS.v2BSuct, evenStarts(2, 2.6), 5.8, FLUID.sewage.fill);
-    beads(open("V1-BOT") || open("V1-MID") || open("V2A-SUCT") || open("V2B-SUCT"), PATHS.macCollect, evenStarts(2, 1.8), 2.4, FLUID.sewage.fill);
+    beads(open("V2-SUCT"), PATHS.v2Suct, evenStarts(2, 2.4), 5.5, FLUID.sewage.fill);
+    beads(open("V1-BOT") || open("V1-MID") || open("V2-SUCT"), PATHS.macCollect, evenStarts(2, 1.8), 2.4, FLUID.sewage.fill);
     beads(open("V-REC") || open("V-FWD") || open("MAC-V2") || open("MAC-OUT"), PATHS.macToDischMan, evenStarts(2, 1.5), 1.8, FLUID.sewage.fill);
     beads(open("V-REC"), PATHS.macRec, evenStarts(2, 2.2), 4.2, FLUID.sewage.fill);
     beads(open("MAC-V2"), PATHS.macToV2, evenStarts(2, 2.4), 5.0, FLUID.sewage.fill);
     beads(open("MAC-OUT"), PATHS.macOverboard, evenStarts(2, 2.6), 5.5, FLUID.untreated.fill);
-    beads(open("V-U"), PATHS.v2U, evenStarts(2, 2.0), 3.4, FLUID.seawater.fill);
+    beads(open("CL-PERI"), PATHS.clToV2, evenStarts(2, 1.8), 2.8, "#F87171", "#DC2626");
+    beads(open("DECHLOR-PERI"), PATHS.dechlorToGrav, evenStarts(2, 1.8), 2.6, "#86EFAC", "#16A34A");
     beads(open("V1-TOP-DRN"), PATHS.v1TopDrn, evenStarts(2, 2.8), 5.5, FLUID.untreated.fill);
     beads(open("V-OVF"), PATHS.ovf, evenStarts(2, 3.0), 5.0, FLUID.untreated.fill);
     beads(open("V-GRAV"), PATHS.v2toGrav, evenStarts(2, 2.2), 4.0, FLUID.seawater.fill);
@@ -1622,21 +1645,20 @@
     valvesG.innerHTML = "";
     valveNodes = {};
     makeValve("V-SW-V1", swManX, swV.v1, 18, -2);
-    makeValve("V-SW-V2B", swManX, swV.v2b, -16, -2);
-    makeValve("V-SW-V2A", swManX, swV.v2a, -16, -2);
+    makeValve("V-SW-V2", swManX, swV.v2, -16, -2);
     makeValve("BC-FLUSH", swManX, swV.flush, -16, -2);
     makeValve("V-SW-NORM", swManX, swV.norm, 18, -2);
     makeValve("V1-MID", v1MidValveX, macV.mid, -16, -2);
     makeValve("V1-BOT", v1BotValveX, macV.bot, -16, -2);
-    makeValve("V2A-SUCT", macManX, macV.v2a, 18, -2);
-    makeValve("V2B-SUCT", macManX, macV.v2b, 18, -2);
+    makeValve("V2-SUCT", macManX, macV.v2, 18, -2);
     makeValve("V-REC", macOutManX, macOutV.rec, 18, -2);
     makeValve("V-FWD", macOutManX, macOutV.bc, 18, -2);
     makeValve("MAC-V2", macOutManX, macOutV.v2, 18, -2);
     makeValve("MAC-OUT", macOutManX, macOutV.out, 18, -2);
-    makeValve("V-U", (uFromX + uToX) / 2, v2UTopY, 0, -18);
     makeValve("V1-TOP-DRN", v1DrainDropX, v1TopDrnY, 0, -20);
     makeValve("V-OVF", v2OvfX, ovfY, 0, -20);
+    makeValve("CL-PERI", clPeri.x + clPeri.w + 14, clPeri.y + clPeri.h / 2, 16, -2);
+    makeValve("DECHLOR-PERI", dePeri.x + dePeri.w + 14, dePeri.y + dePeri.h / 2, 16, -2);
     makeValve("V-GRAV", pump.x - 18, leaveY, 0, -20);
     makeValve("V-GRAV-OUT", pumpOutX + 40, pumpInY, 0, 20);
   }
@@ -1683,7 +1705,9 @@
       "V-SW-NORM": true,
       "V-FWD": true,
       "V1-MID": true,
-      "V-REC": true
+      "V-REC": true,
+      "CL-PERI": true,
+      "DECHLOR-PERI": true
     });
     renderDynamic();
   });
@@ -1707,462 +1731,354 @@
   "use strict";
 
   var editOn = true;
-  var connectOn = false;
+  var tool = "move";
   var snap = 10;
   var dragging = null;
   var connectFrom = null;
   var preview = null;
-  var layouts = loadLayouts();
-  var links = loadLinks();
-  var linkLayerBySvg = new WeakMap();
+  var layouts = loadJSON("msd-edit-layouts", {});
+  var links = loadJSON("msd-edit-links", {});
+  var ports = loadJSON("msd-edit-ports", {});
+  var linkLayers = new WeakMap();
+  var portLayers = new WeakMap();
   var idSeq = 1;
+  var HINTS = {
+    move: "Move parts: right-click a component, drag, release to snap.",
+    addport: "Add connection point: left-click the diagram to place a port (snaps to grid). Right-click a port to delete it.",
+    moveport: "Move points: left-drag a cyan connection point; release to snap.",
+    connect: "Connect points: click port A, then port B. Right-click a line to delete it."
+  };
 
   function $(id) { return document.getElementById(id); }
-
-  function loadLayouts() {
-    try { return JSON.parse(localStorage.getItem("msd-edit-layouts") || "{}"); }
-    catch (e) { return {}; }
+  function loadJSON(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key) || "null") || fallback; }
+    catch (e) { return fallback; }
   }
-  function saveLayouts() {
+  function persistAll() {
     localStorage.setItem("msd-edit-layouts", JSON.stringify(layouts));
-  }
-  function loadLinks() {
-    try { return JSON.parse(localStorage.getItem("msd-edit-links") || "{}"); }
-    catch (e) { return {}; }
-  }
-  function saveLinks() {
     localStorage.setItem("msd-edit-links", JSON.stringify(links));
+    localStorage.setItem("msd-edit-ports", JSON.stringify(ports));
   }
-
-  function snapVal(v) {
-    return Math.round(v / snap) * snap;
-  }
-
+  function snapVal(v) { return Math.round(v / snap) * snap; }
   function ensureSvgId(svg, index) {
     if (!svg.dataset.editSvgId) svg.dataset.editSvgId = "svg-" + index;
     return svg.dataset.editSvgId;
   }
-
   function ensureNodeId(el) {
-    if (!el.dataset.editId) {
-      el.dataset.editId = "n" + (idSeq++);
-    }
+    if (!el.dataset.editId) el.dataset.editId = "n" + (idSeq++);
     return el.dataset.editId;
   }
+  function newPortId() { return "p" + Date.now().toString(36) + (idSeq++); }
 
   function svgPoint(svg, evt) {
     var pt = svg.createSVGPoint();
-    pt.x = evt.clientX;
-    pt.y = evt.clientY;
+    pt.x = evt.clientX; pt.y = evt.clientY;
     var ctm = svg.getScreenCTM();
     if (!ctm) return { x: 0, y: 0 };
-    var p = pt.matrixTransform(ctm.inverse());
-    return { x: p.x, y: p.y };
+    return pt.matrixTransform(ctm.inverse());
   }
-
   function getTranslate(el) {
     var t = el.getAttribute("transform") || "";
     var m = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(t);
     if (m) return { x: parseFloat(m[1]), y: parseFloat(m[2]), rest: t.replace(m[0], "").trim() };
     return { x: 0, y: 0, rest: t };
   }
-
   function setTranslate(el, x, y, rest) {
-    var other = rest || "";
-    // strip existing translate
-    other = other.replace(/translate\(\s*[-\d.]+[ ,]+[-\d.]+\s*\)/g, "").trim();
+    var other = (rest || "").replace(/translate\(\s*[-\d.]+[ ,]+[-\d.]+\s*\)/g, "").trim();
     var tr = "translate(" + x + " " + y + ")";
     el.setAttribute("transform", other ? tr + " " + other : tr);
   }
+  function isPortEl(el) { return !!(el && el.classList && el.classList.contains("edit-port")); }
 
   function isDraggableTarget(el) {
-    if (!el || el.ownerSVGElement == null) return null;
-    if (el.classList && (el.classList.contains("user-link") || el.classList.contains("user-link-hit") || el.classList.contains("connect-preview") || el.classList.contains("snap-ghost"))) {
-      return null;
-    }
-    // climb to a sensible node: prefer g with geometry, else shape
+    if (!el || !el.ownerSVGElement) return null;
+    if (isPortEl(el)) return null;
+    if (el.classList && (el.classList.contains("user-link") || el.classList.contains("user-link-hit") || el.classList.contains("connect-preview") || el.classList.contains("edit-port-label"))) return null;
     var cur = el;
     while (cur && cur.tagName && cur.tagName.toLowerCase() !== "svg") {
       var tag = cur.tagName.toLowerCase();
       if (cur.dataset && cur.dataset.noEdit === "1") return null;
-      if (tag === "g" && cur.id === "beads4") return null;
-      if (tag === "g" && cur.id === "flows4") return null;
-      if (cur.querySelector && cur.querySelector("animateMotion")) {
-        // skip bead groups
-        cur = cur.parentNode;
-        continue;
-      }
-      if (tag === "g" || tag === "rect" || tag === "circle" || tag === "ellipse" || tag === "path" || tag === "polygon" || tag === "polyline" || tag === "text" || tag === "line") {
-        // Prefer wrapping single shapes into a group for transform stability when possible
-        return cur;
-      }
+      if (cur.id === "beads4" || cur.id === "flows4" || cur.id === "valves4") return null;
+      if (cur.classList && (cur.classList.contains("ports-layer") || cur.classList.contains("user-links"))) return null;
+      if (cur.querySelector && cur.querySelector(":scope > animateMotion")) { cur = cur.parentNode; continue; }
+      if (tag === "g" || tag === "rect" || tag === "circle" || tag === "ellipse" || tag === "path" || tag === "polygon" || tag === "polyline" || tag === "text" || tag === "line") return cur;
       cur = cur.parentNode;
     }
     return null;
   }
-
   function wrapIfNeeded(el) {
-    var tag = el.tagName.toLowerCase();
-    if (tag === "g") return el;
-    // wrap shape in a group so translate works cleanly
-    var parent = el.parentNode;
-    if (!parent) return el;
+    if (el.tagName.toLowerCase() === "g") return el;
+    var parent = el.parentNode; if (!parent) return el;
     var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    parent.insertBefore(g, el);
-    g.appendChild(el);
-    return g;
+    parent.insertBefore(g, el); g.appendChild(el); return g;
   }
-
-  function nodeCenter(el, svg) {
+  function nodeCenter(el) {
     try {
-      var bb = el.getBBox();
-      var tr = getTranslate(el);
+      var bb = el.getBBox(); var tr = getTranslate(el);
       return { x: bb.x + bb.width / 2 + tr.x, y: bb.y + bb.height / 2 + tr.y };
-    } catch (e) {
-      return { x: 0, y: 0 };
-    }
+    } catch (e) { return { x: 0, y: 0 }; }
   }
-
   function ensureDefs(svg) {
     var defs = svg.querySelector("defs");
-    if (!defs) {
-      defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-      svg.insertBefore(defs, svg.firstChild);
-    }
+    if (!defs) { defs = document.createElementNS("http://www.w3.org/2000/svg", "defs"); svg.insertBefore(defs, svg.firstChild); }
     if (!svg.querySelector("#edit-arrow")) {
       var marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
       marker.setAttribute("id", "edit-arrow");
       marker.setAttribute("viewBox", "0 0 10 10");
-      marker.setAttribute("refX", "9");
-      marker.setAttribute("refY", "5");
-      marker.setAttribute("markerWidth", "6");
-      marker.setAttribute("markerHeight", "6");
+      marker.setAttribute("refX", "9"); marker.setAttribute("refY", "5");
+      marker.setAttribute("markerWidth", "6"); marker.setAttribute("markerHeight", "6");
       marker.setAttribute("orient", "auto-start-reverse");
       var tip = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      tip.setAttribute("d", "M 0 1 L 10 5 L 0 9 z");
-      tip.setAttribute("fill", "var(--accent)");
-      marker.appendChild(tip);
-      defs.appendChild(marker);
+      tip.setAttribute("d", "M 0 1 L 10 5 L 0 9 z"); tip.setAttribute("fill", "var(--accent)");
+      marker.appendChild(tip); defs.appendChild(marker);
     }
   }
-
   function ensureLinkLayer(svg) {
-    var layer = linkLayerBySvg.get(svg);
+    var layer = linkLayers.get(svg);
     if (layer && layer.parentNode) return layer;
     layer = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    layer.setAttribute("class", "user-links");
-    layer.setAttribute("data-no-edit", "1");
-    svg.appendChild(layer);
-    linkLayerBySvg.set(svg, layer);
-    return layer;
+    layer.setAttribute("class", "user-links"); layer.setAttribute("data-no-edit", "1");
+    svg.appendChild(layer); linkLayers.set(svg, layer); return layer;
+  }
+  function ensurePortLayer(svg) {
+    var layer = portLayers.get(svg);
+    if (layer && layer.parentNode) return layer;
+    layer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    layer.setAttribute("class", "ports-layer"); layer.setAttribute("data-no-edit", "1");
+    svg.appendChild(layer); portLayers.set(svg, layer); return layer;
+  }
+  function portList(sid) { if (!ports[sid]) ports[sid] = []; return ports[sid]; }
+  function findPort(sid, pid) {
+    var list = portList(sid);
+    for (var i = 0; i < list.length; i++) if (list[i].id === pid) return list[i];
+    return null;
+  }
+  function endpoint(svg, sid, ref) {
+    if (ref.type === "port") {
+      var p = findPort(sid, ref.id); return p ? { x: p.x, y: p.y } : null;
+    }
+    var el = svg.querySelector('[data-edit-id="' + ref.id + '"]');
+    return el ? nodeCenter(el) : null;
   }
 
-  function applySavedLayout(svg) {
+  function redrawPorts(svg) {
     var sid = ensureSvgId(svg, 0);
-    var map = layouts[sid] || {};
-    Object.keys(map).forEach(function (nid) {
-      var el = svg.querySelector('[data-edit-id="' + nid + '"]');
-      if (!el) return;
-      var pos = map[nid];
-      var cur = getTranslate(el);
-      setTranslate(el, pos.x, pos.y, cur.rest);
+    var layer = ensurePortLayer(svg);
+    while (layer.firstChild) layer.removeChild(layer.firstChild);
+    portList(sid).forEach(function (p) {
+      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("class", "edit-port" + (connectFrom === p.id ? " selected" : ""));
+      c.setAttribute("cx", p.x); c.setAttribute("cy", p.y); c.setAttribute("r", 7);
+      c.dataset.portId = p.id; c.setAttribute("data-no-edit", "1");
+      layer.appendChild(c);
+      var label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("class", "edit-port-label");
+      label.setAttribute("x", p.x + 9); label.setAttribute("y", p.y - 8);
+      label.textContent = p.label || "•"; label.setAttribute("data-no-edit", "1");
+      layer.appendChild(label);
     });
-  }
-
-  function persistNode(svg, el) {
-    var sid = ensureSvgId(svg, 0);
-    var nid = ensureNodeId(el);
-    if (!layouts[sid]) layouts[sid] = {};
-    var tr = getTranslate(el);
-    layouts[sid][nid] = { x: tr.x, y: tr.y };
   }
 
   function redrawLinks(svg) {
     var sid = ensureSvgId(svg, 0);
     var layer = ensureLinkLayer(svg);
     while (layer.firstChild) layer.removeChild(layer.firstChild);
-    var list = links[sid] || [];
-    list.forEach(function (link, idx) {
-      var a = svg.querySelector('[data-edit-id="' + link.from + '"]');
-      var b = svg.querySelector('[data-edit-id="' + link.to + '"]');
+    (links[sid] || []).forEach(function (link, idx) {
+      var a = endpoint(svg, sid, link.from); var b = endpoint(svg, sid, link.to);
       if (!a || !b) return;
-      var ca = nodeCenter(a, svg);
-      var cb = nodeCenter(b, svg);
       var hit = document.createElementNS("http://www.w3.org/2000/svg", "line");
       hit.setAttribute("class", "user-link-hit");
-      hit.setAttribute("x1", ca.x);
-      hit.setAttribute("y1", ca.y);
-      hit.setAttribute("x2", cb.x);
-      hit.setAttribute("y2", cb.y);
-      hit.dataset.linkIndex = String(idx);
+      hit.setAttribute("x1", a.x); hit.setAttribute("y1", a.y);
+      hit.setAttribute("x2", b.x); hit.setAttribute("y2", b.y);
+      hit.dataset.linkIndex = String(idx); hit.setAttribute("data-no-edit", "1");
       hit.addEventListener("contextmenu", function (evt) {
         if (!editOn) return;
-        evt.preventDefault();
-        evt.stopPropagation();
-        links[sid].splice(idx, 1);
-        saveLinks();
-        redrawLinks(svg);
+        evt.preventDefault(); evt.stopPropagation();
+        var i = Number(hit.dataset.linkIndex);
+        links[sid].splice(i, 1); persistAll(); redrawLinks(svg);
       });
       var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
       line.setAttribute("class", "user-link");
-      line.setAttribute("x1", ca.x);
-      line.setAttribute("y1", ca.y);
-      line.setAttribute("x2", cb.x);
-      line.setAttribute("y2", cb.y);
-      line.setAttribute("marker-end", "url(#edit-arrow)");
-      layer.appendChild(hit);
-      layer.appendChild(line);
+      line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
+      line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+      line.setAttribute("marker-end", "url(#edit-arrow)"); line.setAttribute("data-no-edit", "1");
+      layer.appendChild(hit); layer.appendChild(line);
     });
   }
 
-  function clearSelection(svg) {
-    svg.querySelectorAll(".movable-selected").forEach(function (n) {
-      n.classList.remove("movable-selected");
+  function refresh(svg) { redrawPorts(svg); redrawLinks(svg); }
+
+  function applySavedLayout(svg) {
+    var sid = ensureSvgId(svg, 0); var map = layouts[sid] || {};
+    Object.keys(map).forEach(function (nid) {
+      var el = svg.querySelector('[data-edit-id="' + nid + '"]');
+      if (!el) return;
+      var cur = getTranslate(el); setTranslate(el, map[nid].x, map[nid].y, cur.rest);
     });
+  }
+  function persistNode(svg, el) {
+    var sid = ensureSvgId(svg, 0); var nid = ensureNodeId(el);
+    if (!layouts[sid]) layouts[sid] = {};
+    var tr = getTranslate(el); layouts[sid][nid] = { x: tr.x, y: tr.y };
   }
 
   function onContextMenu(evt) {
     if (!editOn) return;
     var svg = evt.currentTarget;
-    var t = isDraggableTarget(evt.target);
-    if (!t) return;
-    evt.preventDefault();
-    evt.stopPropagation();
+    evt.preventDefault(); evt.stopPropagation();
+    var sid = ensureSvgId(svg, 0);
 
-    // right-click existing user link handled separately
-    if (evt.target.classList && evt.target.classList.contains("user-link-hit")) return;
-
-    t = wrapIfNeeded(t);
-    ensureNodeId(t);
-    clearSelection(svg);
-    t.classList.add("movable-selected");
-
-    var p = svgPoint(svg, evt);
-    var tr = getTranslate(t);
-    dragging = {
-      svg: svg,
-      el: t,
-      startX: p.x,
-      startY: p.y,
-      origX: tr.x,
-      origY: tr.y,
-      rest: tr.rest
-    };
-
-    // snap ghost
-    var ghost = svg.querySelector(".snap-ghost");
-    if (!ghost) {
-      ghost = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      ghost.setAttribute("class", "snap-ghost");
-      svg.appendChild(ghost);
+    if (isPortEl(evt.target)) {
+      var pid = evt.target.dataset.portId;
+      ports[sid] = portList(sid).filter(function (p) { return p.id !== pid; });
+      links[sid] = (links[sid] || []).filter(function (L) {
+        return !((L.from.type === "port" && L.from.id === pid) || (L.to.type === "port" && L.to.id === pid));
+      });
+      if (connectFrom === pid) connectFrom = null;
+      persistAll(); refresh(svg); return;
     }
-    try {
-      var bb = t.getBBox();
-      ghost.setAttribute("x", bb.x + tr.x);
-      ghost.setAttribute("y", bb.y + tr.y);
-      ghost.setAttribute("width", bb.width);
-      ghost.setAttribute("height", bb.height);
-    } catch (e) {}
+
+    if (tool !== "move") return;
+    var t = isDraggableTarget(evt.target); if (!t) return;
+    t = wrapIfNeeded(t); ensureNodeId(t);
+    svg.querySelectorAll(".movable-selected").forEach(function (n) { n.classList.remove("movable-selected"); });
+    t.classList.add("movable-selected");
+    var p = svgPoint(svg, evt); var tr = getTranslate(t);
+    dragging = { kind: "node", svg: svg, el: t, startX: p.x, startY: p.y, origX: tr.x, origY: tr.y, rest: tr.rest };
+  }
+
+  function onPointerDown(evt) {
+    if (!editOn || evt.button !== 0) return;
+    var svg = evt.currentTarget; var sid = ensureSvgId(svg, 0); var p = svgPoint(svg, evt);
+
+    if (tool === "addport") {
+      evt.preventDefault(); evt.stopPropagation();
+      portList(sid).push({ id: newPortId(), x: snapVal(p.x), y: snapVal(p.y), label: "P" + (portList(sid).length + 1) });
+      persistAll(); refresh(svg); return;
+    }
+    if (tool === "moveport" && isPortEl(evt.target)) {
+      evt.preventDefault(); evt.stopPropagation();
+      var meta = findPort(sid, evt.target.dataset.portId); if (!meta) return;
+      dragging = { kind: "port", svg: svg, portId: meta.id, startX: p.x, startY: p.y, origX: meta.x, origY: meta.y };
+      return;
+    }
+    if (tool === "connect" && isPortEl(evt.target)) {
+      evt.preventDefault(); evt.stopPropagation();
+      var pid = evt.target.dataset.portId;
+      if (!connectFrom) {
+        connectFrom = pid;
+        var from = findPort(sid, pid);
+        preview = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        preview.setAttribute("class", "connect-preview");
+        preview.setAttribute("x1", from.x); preview.setAttribute("y1", from.y);
+        preview.setAttribute("x2", from.x); preview.setAttribute("y2", from.y);
+        svg.appendChild(preview); redrawPorts(svg); return;
+      }
+      if (connectFrom === pid) return;
+      if (!links[sid]) links[sid] = [];
+      links[sid].push({ from: { type: "port", id: connectFrom }, to: { type: "port", id: pid } });
+      connectFrom = null; if (preview) { preview.remove(); preview = null; }
+      persistAll(); refresh(svg);
+    }
   }
 
   function onPointerMove(evt) {
-    var svg = evt.currentTarget;
-    var p = svgPoint(svg, evt);
-
+    var svg = evt.currentTarget; var p = svgPoint(svg, evt); var sid = ensureSvgId(svg, 0);
     if (dragging && dragging.svg === svg) {
       evt.preventDefault();
-      var dx = p.x - dragging.startX;
-      var dy = p.y - dragging.startY;
-      var nx = snapVal(dragging.origX + dx);
-      var ny = snapVal(dragging.origY + dy);
-      setTranslate(dragging.el, nx, ny, dragging.rest);
-      var ghost = svg.querySelector(".snap-ghost");
-      if (ghost) {
-        try {
-          var bb = dragging.el.getBBox();
-          var tr = getTranslate(dragging.el);
-          ghost.setAttribute("x", bb.x + tr.x);
-          ghost.setAttribute("y", bb.y + tr.y);
-        } catch (e) {}
+      var dx = p.x - dragging.startX; var dy = p.y - dragging.startY;
+      if (dragging.kind === "node") setTranslate(dragging.el, snapVal(dragging.origX + dx), snapVal(dragging.origY + dy), dragging.rest);
+      else if (dragging.kind === "port") {
+        var meta = findPort(sid, dragging.portId);
+        if (meta) { meta.x = snapVal(dragging.origX + dx); meta.y = snapVal(dragging.origY + dy); redrawPorts(svg); }
       }
-      redrawLinks(svg);
-      return;
+      redrawLinks(svg); return;
     }
-
-    if (connectOn && connectFrom && preview) {
-      var c = nodeCenter(connectFrom, svg);
-      preview.setAttribute("x1", c.x);
-      preview.setAttribute("y1", c.y);
-      preview.setAttribute("x2", p.x);
-      preview.setAttribute("y2", p.y);
+    if (tool === "connect" && connectFrom && preview) {
+      var from = findPort(sid, connectFrom);
+      if (from) { preview.setAttribute("x1", from.x); preview.setAttribute("y1", from.y); }
+      preview.setAttribute("x2", p.x); preview.setAttribute("y2", p.y);
     }
   }
 
   function onPointerUp(evt) {
     var svg = evt.currentTarget;
-    if (dragging && dragging.svg === svg) {
-      persistNode(svg, dragging.el);
-      saveLayouts();
-      redrawLinks(svg);
-      var ghost = svg.querySelector(".snap-ghost");
-      if (ghost) ghost.remove();
-      dragging = null;
-    }
-  }
-
-  function onClick(evt) {
-    if (!editOn || !connectOn) return;
-    if (evt.button !== 0) return;
-    var svg = evt.currentTarget;
-    var t = isDraggableTarget(evt.target);
-    if (!t) return;
-    evt.preventDefault();
-    evt.stopPropagation();
-    t = wrapIfNeeded(t);
-    var nid = ensureNodeId(t);
-    clearSelection(svg);
-    t.classList.add("movable-selected");
-
-    if (!connectFrom) {
-      connectFrom = t;
-      preview = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      preview.setAttribute("class", "connect-preview");
-      var c = nodeCenter(t, svg);
-      preview.setAttribute("x1", c.x);
-      preview.setAttribute("y1", c.y);
-      preview.setAttribute("x2", c.x);
-      preview.setAttribute("y2", c.y);
-      svg.appendChild(preview);
-      return;
-    }
-
-    if (connectFrom === t) return;
-    var sid = ensureSvgId(svg, 0);
-    if (!links[sid]) links[sid] = [];
-    links[sid].push({ from: ensureNodeId(connectFrom), to: nid });
-    saveLinks();
-    connectFrom = null;
-    if (preview) { preview.remove(); preview = null; }
-    clearSelection(svg);
-    redrawLinks(svg);
+    if (!dragging || dragging.svg !== svg) return;
+    if (dragging.kind === "node") persistNode(svg, dragging.el);
+    persistAll(); refresh(svg); dragging = null;
   }
 
   function bindSvg(svg, index) {
-    ensureSvgId(svg, index);
-    ensureDefs(svg);
-    ensureLinkLayer(svg);
+    ensureSvgId(svg, index); ensureDefs(svg); ensureLinkLayer(svg); ensurePortLayer(svg);
     svg.addEventListener("contextmenu", onContextMenu);
+    svg.addEventListener("pointerdown", onPointerDown, true);
     svg.addEventListener("pointermove", onPointerMove);
     svg.addEventListener("pointerup", onPointerUp);
     svg.addEventListener("pointerleave", onPointerUp);
-    svg.addEventListener("click", onClick, true);
-
-    // restore any known nodes by scanning saved ids after a tick (diagram 4 builds async)
-    applySavedLayout(svg);
-    redrawLinks(svg);
+    applySavedLayout(svg); refresh(svg);
   }
+  function allSvgs() { return Array.prototype.slice.call(document.querySelectorAll(".diagram-card svg")); }
 
-  function allSvgs() {
-    return Array.prototype.slice.call(document.querySelectorAll(".diagram-card svg"));
-  }
-
-  function setEditVisual() {
-    allSvgs().forEach(function (svg) {
-      var card = svg.closest(".diagram-card");
-      if (card) card.classList.toggle("edit-enabled", editOn);
-    });
+  function paintUI() {
     var btn = $("btn-edit-toggle");
-    if (btn) {
-      btn.textContent = editOn ? "Edit mode ON" : "Edit mode OFF";
-      btn.classList.toggle("active", editOn);
-    }
-    var cbtn = $("btn-connect-mode");
-    if (cbtn) cbtn.classList.toggle("active", connectOn && editOn);
+    if (btn) { btn.textContent = editOn ? "Edit mode ON" : "Edit mode OFF"; btn.classList.toggle("active", editOn); }
+    var map = { move: "btn-tool-move", addport: "btn-tool-addport", moveport: "btn-tool-moveport", connect: "btn-tool-connect" };
+    Object.keys(map).forEach(function (t) {
+      var b = $(map[t]); if (b) b.classList.toggle("active", editOn && tool === t);
+    });
+    var hint = $("edit-hint"); if (hint) hint.textContent = HINTS[tool] || HINTS.move;
+    allSvgs().forEach(function (svg) {
+      var card = svg.closest(".diagram-card"); if (card) card.classList.toggle("edit-enabled", editOn);
+    });
+  }
+  function setTool(next) {
+    tool = next; connectFrom = null; if (preview) { preview.remove(); preview = null; }
+    paintUI(); allSvgs().forEach(redrawPorts);
   }
 
   function boot() {
-    allSvgs().forEach(bindSvg);
-    setEditVisual();
-
-    // Diagram 4 rebuilds content — re-apply after a short delay and on toolbar preset clicks
-    setTimeout(function () {
-      allSvgs().forEach(function (svg, i) {
-        applySavedLayout(svg);
-        redrawLinks(svg);
-      });
-    }, 50);
-
+    allSvgs().forEach(bindSvg); paintUI();
+    setTimeout(function () { allSvgs().forEach(function (svg) { applySavedLayout(svg); refresh(svg); }); }, 80);
     ["btn-reset", "btn-process", "btn-flush"].forEach(function (id) {
-      var b = $(id);
-      if (!b) return;
+      var b = $(id); if (!b) return;
       b.addEventListener("click", function () {
         setTimeout(function () {
-          var svg = document.getElementById("diagram4");
-          if (!svg) return;
-          ensureLinkLayer(svg);
-          applySavedLayout(svg);
-          redrawLinks(svg);
-        }, 30);
+          var svg = document.getElementById("diagram4"); if (!svg) return;
+          ensureLinkLayer(svg); ensurePortLayer(svg); applySavedLayout(svg); refresh(svg);
+        }, 40);
       });
     });
   }
 
   $("btn-edit-toggle").addEventListener("click", function () {
     editOn = !editOn;
-    if (!editOn) {
-      connectOn = false;
-      connectFrom = null;
-      if (preview) { preview.remove(); preview = null; }
-      dragging = null;
-    }
-    setEditVisual();
+    if (!editOn) { connectFrom = null; if (preview) { preview.remove(); preview = null; } dragging = null; }
+    paintUI();
   });
-
-  $("btn-connect-mode").addEventListener("click", function () {
-    if (!editOn) editOn = true;
-    connectOn = !connectOn;
-    connectFrom = null;
-    if (preview) { preview.remove(); preview = null; }
-    setEditVisual();
-  });
-
+  $("btn-tool-move").addEventListener("click", function () { setTool("move"); });
+  $("btn-tool-addport").addEventListener("click", function () { setTool("addport"); });
+  $("btn-tool-moveport").addEventListener("click", function () { setTool("moveport"); });
+  $("btn-tool-connect").addEventListener("click", function () { setTool("connect"); });
   $("snap-size").addEventListener("change", function () {
-    var v = parseInt($("snap-size").value, 10);
-    if (!isFinite(v) || v < 1) v = 10;
-    snap = v;
+    var v = parseInt($("snap-size").value, 10); snap = (!isFinite(v) || v < 1) ? 10 : v;
   });
-
-  $("btn-clear-links").addEventListener("click", function () {
-    links = {};
-    saveLinks();
-    allSvgs().forEach(redrawLinks);
-  });
-
+  $("btn-clear-links").addEventListener("click", function () { links = {}; persistAll(); allSvgs().forEach(redrawLinks); });
+  $("btn-clear-ports").addEventListener("click", function () { ports = {}; links = {}; connectFrom = null; persistAll(); allSvgs().forEach(refresh); });
   $("btn-reset-layout").addEventListener("click", function () {
-    layouts = {};
-    saveLayouts();
+    layouts = {}; persistAll();
     allSvgs().forEach(function (svg) {
       svg.querySelectorAll("[data-edit-id]").forEach(function (el) {
-        var tr = getTranslate(el);
-        setTranslate(el, 0, 0, tr.rest);
-        el.classList.remove("movable-selected");
+        var tr = getTranslate(el); setTranslate(el, 0, 0, tr.rest); el.classList.remove("movable-selected");
       });
-      redrawLinks(svg);
+      refresh(svg);
     });
   });
-
   $("btn-save-layout").addEventListener("click", function () {
-    saveLayouts();
-    saveLinks();
-    alert("Layout and connections saved in this browser.");
+    persistAll(); alert("Layout, connection points, and lines saved in this browser.");
   });
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    // diagram 4 script may run after this if order wrong — delay slightly
-    setTimeout(boot, 0);
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else setTimeout(boot, 0);
 })();
 </script>
 
