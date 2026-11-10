@@ -190,11 +190,19 @@ export default function App() {
         <div className="export-group">
           <a
             className="msd-link"
+            href={`${import.meta.env.BASE_URL}msd-editor.html`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            MSD editor
+          </a>
+          <a
+            className="msd-link"
             href={`${import.meta.env.BASE_URL}msd-line-diagrams.html`}
             target="_blank"
             rel="noreferrer"
           >
-            MSD line diagrams
+            MSD package
           </a>
           <button type="button" className="primary" onClick={downloadDxf}>
             Export DXF
