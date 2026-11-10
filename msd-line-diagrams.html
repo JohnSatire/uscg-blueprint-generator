@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" />
+<title>MSD line diagrams — proposal package (annotated steps)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-elevated: #1a222c;
+    --fill-primary: #243040;
+    --fill-secondary: #2a3644;
+    --fill-tertiary: #354454;
+    --ink: #e8eef4;
+    --soft: #6b7c8f;
+    --mute: #8a9aab;
+    --label: #f0f4f8;
+    --accent: #5eb0ff;
+    --open: #3cb371;
+    --closed: #8a9aab;
+    --sw-fill: #3B82F6;
+    --sw-stroke: #2563EB;
+    --sewage-fill: #E8C84A;
+    --sewage-stroke: #C9A227;
+    --untreated-fill: #F87171;
+    --untreated-stroke: #DC2626;
+    --solids-fill: #1a1a1a;
+    --solids-stroke: #E8C84A;
+    --page: #0f1419;
+    --card: #1a222c;
+    --border: #3a4a5c;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f6f8;
+      --bg-elevated: #ffffff;
+      --fill-primary: #eef2f6;
+      --fill-secondary: #e2e8f0;
+      --fill-tertiary: #d0d9e4;
+      --ink: #1a2330;
+      --soft: #7a8a9a;
+      --mute: #5a6a7a;
+      --label: #122033;
+      --accent: #1565c0;
+      --page: #f4f6f8;
+      --card: #ffffff;
+      --border: #c5d0dc;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--page);
+    color: var(--label);
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  }
+  .wrap {
+    max-width: 2200px;
+    margin: 0 auto;
+    padding: 16px 20px 48px;
+  }
+  header.page-head {
+    margin-bottom: 10px;
+  }
+  header.page-head h1 {
+    margin: 0 0 6px;
+    font-size: 1.55rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  header.page-head p {
+    margin: 0;
+    color: var(--mute);
+    font-size: 0.95rem;
+    max-width: 72ch;
+    line-height: 1.45;
+  }
+  .sticky-nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 0 12px;
+    margin: 0 0 12px;
+    background: color-mix(in srgb, var(--page) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .sticky-nav a {
+    display: inline-block;
+    padding: 7px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--fill-secondary);
+    color: var(--label);
+    text-decoration: none;
+    font-size: 0.86rem;
+    font-weight: 650;
+  }
+  .sticky-nav a:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 22px;
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+  .swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid transparent;
+  }
+  .swatch.sw { background: var(--sw-fill); border-color: var(--sw-stroke); }
+  .swatch.sewage { background: var(--sewage-fill); border-color: var(--sewage-stroke); }
+  .swatch.untreated { background: var(--untreated-fill); border-color: var(--untreated-stroke); }
+  .swatch.solids { background: var(--solids-fill); border-color: var(--solids-stroke); }
+  .diag-section {
+    margin: 0 0 28px;
+    scroll-margin-top: 64px;
+  }
+  .diag-section h2 {
+    margin: 0 0 6px;
+    font-size: 1.28rem;
+    font-weight: 700;
+  }
+  .diag-section .desc {
+    margin: 0 0 12px;
+    color: var(--mute);
+    font-size: 0.95rem;
+    line-height: 1.45;
+    max-width: 90ch;
+  }
+  .diagram-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: auto;
+    padding: 8px;
+  }
+  .diagram-card svg.static-diag,
+  #diagram4 {
+    display: block;
+    width: 100%;
+    min-width: 900px;
+    height: auto;
+    background: var(--bg-elevated);
+  }
+  #diagram4 { min-width: 1100px; }
+  .valve-hit { cursor: pointer; }
+  .valve-hit:hover .valve-body { filter: brightness(1.15); }
+  #schedule {
+    margin-top: 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px 18px;
+  }
+  #schedule h3 {
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+  }
+  #schedule .hint {
+    color: var(--mute);
+    font-size: 0.85rem;
+    margin: 0 0 12px;
+  }
+  .sched-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 18px;
+  }
+  @media (max-width: 1100px) {
+    .sched-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 700px) {
+    .sched-grid { grid-template-columns: 1fr; }
+  }
+  .sched-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.88rem;
+    padding: 4px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .sched-row .id {
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 7.5em;
+    font-variant-numeric: tabular-nums;
+  }
+  .sched-row .desc { color: var(--mute); flex: 1; }
+  .sched-row .state {
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .sched-row.open .state { color: var(--open); }
+  .sched-row.closed .state { color: var(--closed); }
+  .sched-row.closed .id { color: var(--mute); }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 12px;
+  }
+  .toolbar button {
+    background: var(--fill-secondary);
+    color: var(--label);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .howto {
+    margin: 0 0 20px;
+    padding: 16px 18px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .howto h2 {
+    margin: 0 0 8px;
+    font-size: 1.15rem;
+  }
+  .howto ol {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: var(--mute);
+    line-height: 1.5;
+  }
+  .howto li { margin: 0 0 6px; }
+  .howto strong { color: var(--label); }
+  .steps {
+    margin: 0 0 14px;
+    padding: 14px 16px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--card));
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+    border-radius: 10px;
+  }
+  .steps h3 {
+    margin: 0 0 10px;
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .steps ol {
+    margin: 0;
+    padding-left: 1.2rem;
+    display: grid;
+    gap: 8px;
+  }
+  .steps li {
+    color: var(--mute);
+    line-height: 1.45;
+    font-size: 0.92rem;
+  }
+  .steps li strong { color: var(--label); }
+  .steps .why {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.84rem;
+    color: var(--soft);
+  }
+  .mode-note {
+    margin: 8px 0 0;
+    font-size: 0.86rem;
+    color: var(--mute);
+  }
+  .sticky-nav a.howto-link {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  @media print {
+    :root {
+      --bg: #fff;
+      --bg-elevated: #fff;
+      --fill-primary: #f5f5f5;
+      --fill-secondary: #eee;
+      --fill-tertiary: #ddd;
+      --ink: #111;
+      --soft: #666;
+      --mute: #555;
+      --label: #111;
+      --accent: #0b5cad;
+      --page: #fff;
+      --card: #fff;
+      --border: #999;
+      --open: #1a7a3a;
+    }
+    body { background: #fff; color: #111; }
+    .sticky-nav, .toolbar { display: none; }
+    .diag-section { break-inside: avoid; }
+    .diagram-card, #schedule { break-inside: avoid; border-color: #999; }
+    .diagram-card svg.static-diag, #diagram4 { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page-head">
+    <h1>MSD line diagrams — proposal package</h1>
+    <p>Offline proposal schematics for as-built, altered plant, 208&nbsp;V sterilize control, and interactive transfer / wash / flush — now with numbered step explanations under each diagram. Open via file:// or the hosted link; no network required for the diagrams themselves.</p>
+  </header>
+
+  <nav class="sticky-nav" aria-label="Diagram jump links">
+    <a class="howto-link" href="#howto">0 · How to read</a>
+    <a href="#d1">1 · Existing / as-built</a>
+    <a href="#d2">2 · Altered plant</a>
+    <a href="#d3">3 · 208 V control + sterilize</a>
+    <a href="#d4">4 · Transfer, wash &amp; flush</a>
+  </nav>
+
+  <div class="legend" aria-label="Fluid legend">
+    <div class="legend-item"><span class="swatch sw"></span> Seawater / treated overboard</div>
+    <div class="legend-item"><span class="swatch sewage"></span> Sewage (no solids)</div>
+    <div class="legend-item"><span class="swatch untreated"></span> Untreated overboard</div>
+    <div class="legend-item"><span class="swatch solids"></span> Sewage + solids</div>
+  </div>
+
+  <section class="howto" id="howto">
+    <h2>How to read this package (step by step)</h2>
+    <ol>
+      <li><strong>Start with Diagram 1</strong> — existing as-built flow and why Cl₂ is uncontrolled.</li>
+      <li><strong>Compare to Diagram 2</strong> — altered plant with mix tee, bleach, dechlor, and UV2.</li>
+      <li><strong>Review Diagram 3</strong> — sterilize mode on 208&nbsp;V control (SW-only, high Cl₂).</li>
+      <li><strong>Use Diagram 4</strong> — click valves or preset Process / Backwash to rehearse transfer, wash, and flush.</li>
+      <li><strong>Check the color legend</strong> — blue seawater/treated, yellow sewage, red untreated, black+yellow solids.</li>
+    </ol>
+  </section>
+
+  <!-- ========== DIAGRAM 1 ========== -->
+  <section class="diag-section" id="d1">
+    <h2>Diagram 1 — Existing / as-built</h2>
+    <p class="desc">V-1 bottom suction → macerator → bookcell → V-2 → gravity pump → overboard. Bookcell Cl₂ varies with salinity (no control). Dilution seawater (~30%) enters at the gravity pump and drops overboard residual below bookcell exit — still typically over ADEC without dechlor.</p>
+
+    <div class="steps" aria-label="Diagram 1 process steps">
+      <h3>Process steps — as-built</h3>
+      <ol>
+        <li><strong>Step 1 — Draw from V-1 bottom.</strong> Sewage + settled solids leave the ~1,000&nbsp;gal holding tank at bottom suction.
+          <span class="why">Why: bottom suction pulls solids into treatment instead of leaving them in the tank.</span></li>
+        <li><strong>Step 2 — Grind in the macerator.</strong> Solids are chopped and pumped toward the bookcell.
+          <span class="why">Why: bookcell electrodes need a pumpable slurry, not large solids.</span></li>
+        <li><strong>Step 3 — Electrochlorinate in the bookcell.</strong> Flow rises through the cell; Cl₂ output tracks seawater salinity (no setpoint control).
+          <span class="why">Why: as-built has no bleach dosing — residual varies (beads show ~10 / 15 / 20&nbsp;ppm leaving the cell).</span></li>
+        <li><strong>Step 4 — Buffer in V-2.</strong> Treated flow enters the ~300&nbsp;gal tank (with vent) before discharge.
+          <span class="why">Why: short hold / surge volume between cell and overboard pump.</span></li>
+        <li><strong>Step 5 — Dilute and pump overboard.</strong> Gravity pump takes ~67% from V-2; ~30% seawater dilution joins at the pump; mixture exits the out sea chest.
+          <span class="why">Why: dilution lowers residual (~7 / 10 / 13&nbsp;ppm) but still often exceeds ADEC without dechlor.</span></li>
+      </ol>
+    </div>
+    <div class="diagram-card">
+      <svg class="static-diag" viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram 1 as-built MSD schematic">
+        <defs>
+          <marker id="ah-d1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--ink)" />
+          </marker>
+          <filter id="glow-d1" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.2" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+        <!-- geometry: deck=400, hull=470, ft=26 -->
+        <rect x="40" y="10" width="300" height="32" rx="4" fill="var(--fill-tertiary)" stroke="var(--soft)" />
+        <text x="54" y="32" fill="var(--label)" font-size="14" font-weight="700">As-built · no Cl₂ control</text>
+
+        <line x1="24" y1="192" x2="24" y2="400" stroke="var(--soft)" stroke-width="1.5" />
+        <text x="6" y="196" fill="var(--mute)" font-size="11">8′</text>
+        <text x="6" y="275" fill="var(--mute)" font-size="11">5′</text>
+        <text x="6" y="327" fill="var(--mute)" font-size="11">3′</text>
+        <text x="6" y="404" fill="var(--mute)" font-size="11">0′</text>
+
+        <line x1="32" y1="400" x2="870" y2="400" stroke="var(--soft)" stroke-width="3" />
+        <text x="32" y="418" fill="var(--mute)" font-size="12" font-weight="600">Deck</text>
+        <line x1="32" y1="470" x2="870" y2="470" stroke="var(--soft)" stroke-width="2.5" />
+        <text x="32" y="488" fill="var(--mute)" font-size="12" font-weight="600">Hull bottom</text>
+
+        <!-- V-1: x=40,w=100,top=192,bot=322 -->
+        <line x1="60" y1="400" x2="60" y2="322" stroke="var(--soft)" stroke-width="4" stroke-linecap="round" />
+        <line x1="120" y1="400" x2="120" y2="322" stroke="var(--soft)" stroke-width="4" stroke-linecap="round" />
+        <text x="90" y="366" text-anchor="middle" fill="var(--mute)" font-size="11">~3′ stand</text>
+        <rect x="40" y="192" width="100" height="130" rx="4" fill="var(--fill-tertiary)" stroke="var(--ink)" stroke-width="2" />
+        <rect x="45" y="214" width="90" height="98" fill="var(--fill-secondary)" opacity="0.85" />
+        <rect x="45" y="298" width="90" height="18" fill="#1a1a1a" stroke="#E8C84A" stroke-width="2" />
+        <text x="90" y="210" text-anchor="middle" fill="var(--label)" font-size="16" font-weight="700">V-1</text>
+        <text x="90" y="230" text-anchor="middle" fill="var(--mute)" font-size="12">~5′ · ~1,000 gal</text>
+        <text x="90" y="311" text-anchor="middle" fill="#E8C84A" font-size="11" font-weight="700">solids</text>
+        <text x="40" y="434" fill="var(--accent)" font-size="13" font-weight="700">A  Bottom suction → macerator</text>
+
+        <!-- Macerator: x=185,y=274,w=95,h=56 -->
+        <rect x="185" y="274" width="95" height="56" rx="4" fill="var(--fill-secondary)" stroke="var(--ink)" stroke-width="2" />
+        <text x="232" y="300" text-anchor="middle" fill="var(--label)" font-size="14" font-weight="700">Macerator</text>
+        <text x="232" y="318" text-anchor="middle" fill="var(--mute)" font-size="11">grind + pump</text>
+
+        <!-- Bookcell: x=330,w=100,top=270,bot=400 -->
+        <rect x="326" y="267" width="108" height="136" rx="5" fill="var(--fill-tertiary)" stroke="var(--soft)" />
+        <rect x="330" y="270" width="100" height="130" rx="10" fill="var(--fill-primary)" stroke="var(--ink)" stroke-width="2" />
+        <rect x="366" y="330" width="28" height="12" rx="2" fill="var(--accent)" />
+        <text x="380" y="345" text-anchor="middle" fill="var(--label)" font-size="12" font-weight="700" opacity="0.9">↑ FLOW</text>
+        <text x="380" y="258" text-anchor="middle" fill="var(--label)" font-size="15" font-weight="700">Bookcell ~5′</text>
+
+        <!-- V-2: x=500,w=115,top=322,bot=400 -->
+        <rect x="500" y="322" width="115" height="78" rx="4" fill="var(--fill-secondary)" stroke="var(--ink)" stroke-width="2" />
+        <text x="557" y="348" text-anchor="middle" fill="var(--label)" font-size="15" font-weight="700">V-2</text>
+        <text x="557" y="366" text-anchor="middle" fill="var(--mute)" font-size="12">~3′ · ~300 gal</text>
+        <text x="524" y="338" fill="var(--mute)" font-size="11">in</text>
+        <text x="575" y="338" fill="var(--mute)" font-size="11">out</text>
+        <line x1="557" y1="322" x2="557" y2="302" stroke="var(--ink)" stroke-width="1.8" />
+        <line x1="551" y1="302" x2="567" y2="302" stroke="var(--ink)" stroke-width="1.8" />
+        <text x="572" y="306" fill="var(--accent)" font-size="12" font-weight="700">Vent</text>
+
+        <!-- Gravity pump -->
+        <rect x="660" y="330" width="95" height="52" rx="4" fill="var(--fill-secondary)" stroke="var(--ink)" stroke-width="2" />
+        <text x="707" y="352" text-anchor="middle" fill="var(--label)" font-size="13" font-weight="700">Gravity pump</text>
+        <text x="707" y="370" text-anchor="middle" fill="var(--mute)" font-size="11">~67% V-2</text>
+
+        <rect x="764" y="442" width="72" height="28" rx="3" fill="var(--fill-secondary)" stroke="var(--ink)" stroke-width="2" />
+        <text x="800" y="460" text-anchor="middle" fill="var(--label)" font-size="11" font-weight="700">Out sea chest</text>
+        <rect x="676" y="442" width="68" height="28" rx="3" fill="var(--fill-secondary)" stroke="#2563EB" stroke-width="2" />
+        <text x="710" y="460" text-anchor="middle" fill="#3B82F6" font-size="11" font-weight="700">Dilution SW</text>
+
+        <!-- Paths -->
+        <path id="p1-v1mac" d="M 140 310 H 169 V 302 H 185" fill="none" stroke="var(--ink)" stroke-width="3" marker-end="url(#ah-d1)" />
+        <path id="p1-macbc" d="M 280 302 H 314 V 382 H 330" fill="none" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#ah-d1)" />
+        <path id="p1-bcup" d="M 380 380 V 288" fill="none" stroke="var(--ink)" stroke-width="2" />
+        <path id="p1-bcv2" d="M 380 270 V 260 H 530 V 322" fill="none" stroke="var(--ink)" stroke-width="2.8" marker-end="url(#ah-d1)" />
+        <path id="p1-v2pump" d="M 585 322 V 309 H 646 V 356 H 660" fill="none" stroke="var(--ink)" stroke-width="2.8" marker-end="url(#ah-d1)" />
+        <path id="p1-dil" d="M 710 462 V 356 H 755" fill="none" stroke="#2563EB" stroke-width="2.4" stroke-dasharray="5 3" marker-end="url(#ah-d1)" />
+        <path id="p1-out" d="M 707 330 V 265 H 800 V 462" fill="none" stroke="var(--ink)" stroke-width="2.8" marker-end="url(#ah-d1)" />
+
+        <text x="592" y="304" fill="var(--mute)" font-size="11">+6″ · ~67%</text>
+        <text x="730" y="348" fill="#3B82F6" font-size="12" font-weight="700">~30% SW</text>
+        <text x="800" y="500" text-anchor="middle" fill="var(--mute)" font-size="12" font-weight="600">Overboard</text>
+        <text x="40" y="530" fill="var(--mute)" font-size="12">Cl₂ beads: bookcell exit 10 / 15 / 20 ppm → diluted overboard ≈ 7 / 10 / 13 ppm</text>
+
+        <!-- Beads: solids into bookcell -->
+        <circle r="6" fill="#1a1a1a" stroke="#E8C84A" stroke-width="2" filter="url(#glow-d1)"><animateMotion path="M 140 310 H 169 V 302 H 185" dur="3.2s" begin="0s" repeatCount="indefinite" /></circle>
+        <circle r="6" fill="#1a1a1a" stroke="#E8C84A" stroke-width="2" filter="url(#glow-d1)"><animateMotion path="M 140 310 H 169 V 302 H 185" dur="3.2s" begin="1.1s" repeatCount="indefinite" /></circle>
+        <circle r="6" fill="#1a1a1a" stroke="#E8C84A" stroke-width="2" filter="url(#glow-d1)"><animateMotion path="M 140 310 H 169 V 302 H 185" dur="3.2s" begin="2.2s" repeatCount="indefinite" /></circle>
+        <circle r="6" fill="#1a1a1a" stroke="#E8C84A" stroke-width="2" filter="url(#glow-d1)"><animateMotion path="M 280 302 H 314 V 382 H 330" dur="3s" begin="0.4s" repeatCount="indefinite" /></circle>
+        <circle r="6" fill="#1a1a1a" stroke="#E8C84A" stroke-width="2" filter="url(#glow-d1)"><animateMotion path="M 280 302 H 314 V 382 H 330" dur="3s" begin="1.5s" repeatCount="indefinite" /></circle>
+        <circle r="6" fill="#1a1a1a" stroke="#E8C84A" stroke-width="2" filter="url(#glow-d1)"><animateMotion path="M 380 380 V 288" dur="5s" begin="0.7s" repeatCount="indefinite" /></circle>
+        <circle r="6" fill="#1a1a1a" stroke="#E8C84A" stroke-width="2" filter="url(#glow-d1)"><animateMotion path="M 380 380 V 288" dur="5s" begin="2.0s" repeatCount="indefinite" /></circle>
+
+        <!-- Cl₂ after bookcell -->
+        <g filter="url(#glow-d1)"><animateMotion path="M 380 270 V 260 H 530 V 322" dur="2.8s" begin="0.4s" repeatCount="indefinite" /><circle r="8" fill="#EAB308" stroke="var(--ink)" /><text font-size="9" font-weight="700" fill="#111" text-anchor="middle" dy="3">10</text></g>
+        <g filter="url(#glow-d1)"><animateMotion path="M 380 270 V 260 H 530 V 322" dur="2.8s" begin="2.1s" repeatCount="indefinite" /><circle r="8" fill="#F59E0B" stroke="var(--ink)" /><text font-size="9" font-weight="700" fill="#111" text-anchor="middle" dy="3">15</text></g>
+        <g filter="url(#glow-d1)"><animateMotion path="M 380 270 V 260 H 530 V 322" dur="2.8s" begin="3.8s" repeatCount="indefinite" /><circle r="8" fill="#DC2626" stroke="var(--ink)" /><text font-size="9" font-weight="700" fill="#111" text-anchor="middle" dy="3">20</text></g>
+
+        <g filter="url(#glow-d1)"><animateMotion path="M 585 322 V 309 H 646 V 356 H 660" dur="3.2s" begin="0.9s" repeatCount="indefinite" /><circle r="8" fill="#EAB308" stroke="var(--ink)" /><text font-size="9" font-weight="700" fill="#111" text-anchor="middle" dy="3">10</text></g>
+        <g filter="url(#glow-d1)"><animateMotion path="M 585 322 V 309 H 646 V 356 H 660" dur="3.2s" begin="2.6s" repeatCount="indefinite" /><circle r="8" fill="#F59E0B" stroke="var(--ink)" /><text font-size="9" font-weight="700" fill="#111" text-anchor="middle" dy="3">15</text></g>
+
+        <g filter="url(#glow-d1)"><animateMotion path="M 710 462 V 356 H 755" dur="2.8s" begin="0.3s" repeatCount="indefinite" /><circle r="6" fill="#3B82F6" stroke="#1D4ED8" /><text font-size="8" font-weight="700" fill="#fff" text-anchor="middle" dy="3">0</text></g>
+        <g filter="url(#glow-d1)"><animateMotion path="M 710 462 V 356 H 755" dur="2.8s" begin="1.5s" repeatCount="indefinite" /><circle r="6" fill="#3B82F6" stroke="#1D4ED8" /><text font-size="8" font-weight="700" fill="#fff" text-anchor="middle" dy="3">0</text></g>
+
+        <g filter="url(#glow-d1)"><animateMotion path="M 707 330 V 265 H 800 V 462" dur="4s" begin="1.4s" repeatCount="indefinite" /><circle r="8" fill="#F59E0B" stroke="var(--ink)" /><text font-size="9" font-weight="700" fill="#111" text-anchor="middle" dy="3">7</text></g>
+        <g filter="url(#glow-d1)"><animateMotion path="M 707 330 V 265 H 800 V 462" dur="4s" begin="3.1s" repeatCount="indefinite" /><circle r="8" fill="#F59E0B" stroke="var(--ink)" /><text font-size="9" font-weight="700" fill="#111" text-anchor="middle" dy="3">10</text></g>
+        <g filter="url(#glow-d1)"><animateMotion path="M 707 330 V 265 H 800 V 462" dur="4s" begin="4.8s" repeatCount="indefinite" /><circle r="8" fill="#DC2626" stroke="var(--ink)" /><text font-size="9" font-weight="700" fill="#111" text-anchor="middle" dy="3">13</text></g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ========== DIAGRAM 2 ========== -->
+  <section class="diag-section" id="d2">
+    <h2>Diagram 2 — Altered plant</h2>
+    <p class="desc">Dual V-1 suction (+1′ duty / bottom clean-out), SW under macerator into a 2:1 mix tee → bookcell → V-2A/B welded plate with peri bleach (V-2A) and dechlor (V-2B) → gravity → Paramount UV2 → out. Mix beads show 2 SW : 1 sewage; residual Cl₂ leaves near ~2–3 ppm after dechlor.</p>
+
+    <div class="steps" aria-label="Diagram 2 process steps">
+      <h3>Process steps — altered plant</h3>
+      <ol>
+        <li><strong>Step 1 — Dual suction on V-1.</strong> Duty draw at +1′ mid level; bottom path reserved for clean-out.
+          <span class="why">Why: mid suction reduces solids plug risk during normal process; bottom stays for cleaning.</span></li>
+        <li><strong>Step 2 — Macerate sewage only.</strong> Macerator handles sewage; a separate SW pump pulls from the SW sea chest.
+          <span class="why">Why: seawater is metered independently so the mix ratio can be controlled.</span></li>
+        <li><strong>Step 3 — Mix 2 SW : 1 sewage.</strong> Flows join at the mix tee before the bookcell.
+          <span class="why">Why: stable salinity/conductivity improves electrochlorination predictability (animated beads show 2 blue : 1 yellow).</span></li>
+        <li><strong>Step 4 — Treat through bookcell → V-2A / V-2B.</strong> Welded-plate tank: peri bleach into V-2A, dechlor into V-2B.
+          <span class="why">Why: raise then quench Cl₂ so overboard residual lands near ~2–3&nbsp;ppm.</span></li>
+        <li><strong>Step 5 — Discharge via gravity + Paramount UV2.</strong> Gravity pump sends flow through UV2 to the out chest.
+          <span class="why">Why: UV is a final barrier after chemical treatment for proposal compliance.</span></li>
+      </ol>
+    </div>
+    <div class="diagram-card">
+      <svg class="static-diag" viewBox="0 0 2170 1180" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram 2 altered plant schematic">
+        <defs>
+          <marker id="ah-d2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--ink)" />
+          </marker>
+          <filter id="glow-d2" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.1" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <linearGradient id="treatingHalf-d2" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="50%" stop-color="#E8C84A" />
+            <stop offset="50%" stop-color="#3B82F6" />
+          </linearGradient>
+        </defs>
+        <g transform="scale(1.55)">
+          <!-- layout units: deck=430 hull=508 ft=28; scale 1.55 → viewBox ~2170×1180 -->
+          <rect x="28" y="8" width="460" height="30" rx="4" fill="var(--fill-tertiary)" stroke="var(--soft)" />
+          <text x="40" y="28" fill="var(--label)" font-size="14" font-weight="700">Altered · bleach + dechlor · UV2 Paramount</text>
+
+          <line x1="20" y1="430" x2="1380" y2="430" stroke="var(--soft)" stroke-width="3" />
+          <text x="20" y="448" fill="var(--mute)" font-size="12" font-weight="600">Deck</text>
+          <line x1="20" y1="508" x2="1380" y2="508" stroke="var(--soft)" stroke-width="2" />
+          <text x="20" y="526" fill="var(--mute)" font-size="12" font-weight="600">Hull bottom</text>
+
+          <!-- V-1 -->
+          <line x1="54" y1="430" x2="54" y2="346" stroke="var(--soft)" stroke-width="4" />
+          <line x1="138" y1="430" x2="138" y2="346" stroke="var(--soft)" stroke-width="4" />
+          <rect x="36" y="206" width="120" height="140" rx="4" fill="var(--fill-tertiary)" stroke="var(--ink)" stroke-width="2" />
+          <rect x="41" y="326" width="110" height="14" fill="#1a1a1a" stroke="#E8C84A" stroke-width="2" />
+          <text x="96" y="226" text-anchor="middle" fill="var(--label)" font-size="15" font-weight="700">V-1</text>
+          <text x="96" y="246" text-anchor="middle" fill="var(--mute)" font-size="12">~1,000 gal</text>
+          <text x="44" y="312" fill="var(--accent)" font-size="12" font-weight="700">+1′ suction</text>
+          <text x="44" y="348" fill="var(--mute)" font-size="11">bottom clean-out</text>
+
+          <!-- Mac / SW -->
+          <rect x="250" y="286" width="100" height="56" rx="4" fill="var(--fill-secondary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="300" y="312" text-anchor="middle" fill="var(--label)" font-size="14" font-weight="700">Macerator</text>
+          <text x="300" y="330" text-anchor="middle" fill="var(--mute)" font-size="12">sewage only</text>
+          <rect x="250" y="386" width="100" height="40" rx="4" fill="var(--fill-secondary)" stroke="#2563EB" stroke-width="2" />
+          <text x="300" y="404" text-anchor="middle" fill="var(--label)" font-size="13" font-weight="700">SW pump</text>
+          <text x="300" y="420" text-anchor="middle" fill="#3B82F6" font-size="11" font-weight="700">2× forward sewage</text>
+          <rect x="264" y="478" width="72" height="30" rx="3" fill="var(--fill-secondary)" stroke="#2563EB" stroke-width="2" />
+          <text x="300" y="498" text-anchor="middle" fill="#3B82F6" font-size="11" font-weight="700">SW sea chest</text>
+
+          <circle cx="390" cy="314" r="4" fill="var(--fill-tertiary)" stroke="var(--ink)" />
+          <circle cx="460" cy="314" r="9" fill="var(--fill-tertiary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="460" y="296" text-anchor="middle" fill="var(--accent)" font-size="13" font-weight="700">Mix 2:1</text>
+
+          <rect x="520" y="290" width="110" height="140" rx="10" fill="var(--fill-primary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="575" y="276" text-anchor="middle" fill="var(--label)" font-size="15" font-weight="700">Bookcell</text>
+
+          <!-- V-2 330w, plate at 75% -->
+          <rect x="700" y="346" width="330" height="84" rx="4" fill="var(--fill-secondary)" stroke="var(--ink)" stroke-width="2" />
+          <line x1="947" y1="348" x2="947" y2="428" stroke="var(--ink)" stroke-width="4" />
+          <text x="823" y="372" text-anchor="middle" fill="var(--label)" font-size="15" font-weight="700">V-2A</text>
+          <text x="823" y="392" text-anchor="middle" fill="var(--mute)" font-size="13" font-weight="600">~225 gal</text>
+          <text x="988" y="372" text-anchor="middle" fill="var(--label)" font-size="15" font-weight="700">V-2B</text>
+          <text x="988" y="392" text-anchor="middle" fill="var(--mute)" font-size="13" font-weight="600">~75 gal</text>
+          <text x="947" y="420" text-anchor="middle" fill="var(--mute)" font-size="12" font-weight="700">welded plate</text>
+
+          <!-- Peri bleach -->
+          <rect x="802" y="171" width="92" height="64" rx="4" fill="var(--fill-tertiary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="848" y="191" text-anchor="middle" fill="var(--label)" font-size="13" font-weight="700">5 gal</text>
+          <text x="848" y="209" text-anchor="middle" fill="#DC2626" font-size="13" font-weight="700">Bleach 7%</text>
+          <text x="848" y="225" text-anchor="middle" fill="var(--mute)" font-size="12">→ V-2A</text>
+          <rect x="820" y="239" width="56" height="28" rx="3" fill="var(--fill-secondary)" stroke="var(--ink)" />
+          <text x="848" y="252" text-anchor="middle" fill="var(--label)" font-size="11" font-weight="700">Peri #1</text>
+          <text x="848" y="264" text-anchor="middle" fill="var(--mute)" font-size="10">dial 1–10</text>
+
+          <!-- Peri dechlor -->
+          <rect x="958" y="171" width="92" height="64" rx="4" fill="var(--fill-tertiary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="1004" y="191" text-anchor="middle" fill="var(--label)" font-size="13" font-weight="700">5 gal</text>
+          <text x="1004" y="209" text-anchor="middle" fill="#16A34A" font-size="13" font-weight="700">20% dechlor</text>
+          <text x="1004" y="225" text-anchor="middle" fill="var(--mute)" font-size="12">→ V-2B</text>
+          <rect x="976" y="239" width="56" height="28" rx="3" fill="var(--fill-secondary)" stroke="var(--ink)" />
+          <text x="1004" y="252" text-anchor="middle" fill="var(--label)" font-size="11" font-weight="700">Peri #2</text>
+          <text x="1004" y="264" text-anchor="middle" fill="var(--mute)" font-size="10">dial 1–10</text>
+
+          <rect x="1048" y="382" width="64" height="40" rx="3" fill="var(--fill-secondary)" stroke="var(--ink)" />
+          <text x="1080" y="400" text-anchor="middle" fill="var(--label)" font-size="12" font-weight="700">Gravity</text>
+          <text x="1080" y="416" text-anchor="middle" fill="var(--label)" font-size="12" font-weight="700">pump</text>
+
+          <!-- UV2 Paramount: bot=324 top=206 w=78 x=1152 -->
+          <line x1="1142" y1="310" x2="1152" y2="310" stroke="var(--ink)" stroke-width="2.2" />
+          <line x1="1230" y1="222" x2="1240" y2="222" stroke="var(--ink)" stroke-width="2.2" />
+          <line x1="1152" y1="222" x2="1136" y2="222" stroke="var(--ink)" stroke-width="1.8" />
+          <circle cx="1136" cy="222" r="5" fill="var(--fill-secondary)" stroke="var(--accent)" />
+          <text x="1128" y="214" text-anchor="end" fill="var(--accent)" font-size="11" font-weight="700">sample</text>
+          <rect x="1152" y="206" width="78" height="118" rx="12" fill="var(--fill-primary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="1191" y="256" text-anchor="middle" fill="var(--label)" font-size="14" font-weight="700">UV2</text>
+          <text x="1191" y="276" text-anchor="middle" fill="var(--accent)" font-size="12" font-weight="700">PARAMOUNT</text>
+
+          <rect x="1234" y="482" width="72" height="26" rx="3" fill="var(--fill-secondary)" stroke="var(--ink)" />
+          <text x="1270" y="500" text-anchor="middle" fill="var(--label)" font-size="12" font-weight="700">Out chest</text>
+
+          <!-- Pipes -->
+          <path d="M 156 338 H 184 V 314" fill="none" stroke="var(--ink)" stroke-width="1.8" stroke-dasharray="4 3" opacity="0.45" />
+          <path d="M 156 318 H 202 V 314 H 250" fill="none" stroke="var(--ink)" stroke-width="2.6" marker-end="url(#ah-d2)" />
+          <path d="M 350 314 H 390 H 460" fill="none" stroke="var(--ink)" stroke-width="2.4" marker-end="url(#ah-d2)" />
+          <path d="M 390 314 V 252 H 156" fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-dasharray="6 3" marker-end="url(#ah-d2)" />
+          <path d="M 300 478 V 426" fill="none" stroke="#2563EB" stroke-width="2.6" marker-end="url(#ah-d2)" />
+          <path d="M 350 406 H 460 V 314" fill="none" stroke="#2563EB" stroke-width="2.6" marker-end="url(#ah-d2)" />
+          <path d="M 460 314 H 508 V 412 H 575 V 290" fill="none" stroke="var(--ink)" stroke-width="2.6" />
+          <path d="M 575 290 V 280 H 815 V 346" fill="none" stroke="var(--ink)" stroke-width="2.4" marker-end="url(#ah-d2)" />
+          <path d="M 891 346 V 308 H 971 V 346" fill="none" stroke="var(--ink)" stroke-width="2.6" marker-end="url(#ah-d2)" />
+          <path d="M 848 267 V 346" fill="none" stroke="#DC2626" stroke-width="2.2" marker-end="url(#ah-d2)" />
+          <path d="M 1004 267 V 346" fill="none" stroke="#16A34A" stroke-width="2.2" marker-end="url(#ah-d2)" />
+          <path d="M 1020 346 V 332 H 1036 V 402 H 1048" fill="none" stroke="var(--ink)" stroke-width="2.4" marker-end="url(#ah-d2)" />
+          <path d="M 1112 402 H 1142 V 310 H 1152" fill="none" stroke="var(--ink)" stroke-width="2.4" marker-end="url(#ah-d2)" />
+          <path d="M 1152 310 H 1191 V 222 H 1230" fill="none" stroke="var(--ink)" stroke-width="2.2" />
+          <path d="M 1230 222 H 1270 V 500" fill="none" stroke="var(--ink)" stroke-width="2.4" marker-end="url(#ah-d2)" />
+
+          <!-- Valve marks (static duty) -->
+          <g>
+            <path d="M 186 310 L 202 318 L 186 326 Z" fill="var(--fill-secondary)" stroke="var(--ink)" />
+            <path d="M 202 310 L 186 318 L 202 326 Z" fill="var(--bg-elevated)" stroke="var(--ink)" />
+            <text x="194" y="300" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700">V-HI</text>
+            <text x="194" y="342" text-anchor="middle" fill="#2F9E44" font-size="10" font-weight="700">OPEN</text>
+          </g>
+          <g>
+            <path d="M 186 330 L 202 338 L 186 346 Z" fill="var(--fill-tertiary)" stroke="var(--mute)" />
+            <path d="M 202 330 L 186 338 L 202 346 Z" fill="var(--fill-tertiary)" stroke="var(--mute)" />
+            <line x1="184" y1="328" x2="204" y2="348" stroke="var(--mute)" stroke-width="2" />
+            <text x="194" y="360" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700">V-LO</text>
+            <text x="194" y="374" text-anchor="middle" fill="var(--mute)" font-size="10" font-weight="700">CLOSED</text>
+          </g>
+          <text x="370" y="340" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700">V-FWD ≈50%</text>
+          <text x="270" y="244" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700">V-REC ≈50%</text>
+          <text x="400" y="430" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700">V-SW OPEN</text>
+
+          <!-- Flow beads -->
+          <circle r="7" fill="#E8C84A" filter="url(#glow-d2)"><animateMotion path="M 156 318 H 202 V 314 H 250" dur="3.2s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#E8C84A" filter="url(#glow-d2)"><animateMotion path="M 156 318 H 202 V 314 H 250" dur="3.2s" begin="1.4s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#E8C84A" stroke="#A67C00" filter="url(#glow-d2)"><animateMotion path="M 350 314 H 390 H 460" dur="2.4s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#E8C84A" stroke="#A67C00" filter="url(#glow-d2)"><animateMotion path="M 350 314 H 390 H 460" dur="2.4s" begin="2.8s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#E8C84A" stroke="#A67C00" filter="url(#glow-d2)"><animateMotion path="M 350 314 H 390 V 252 H 156" dur="3.6s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#E8C84A" stroke="#A67C00" filter="url(#glow-d2)"><animateMotion path="M 350 314 H 390 V 252 H 156" dur="3.6s" begin="2.8s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#3B82F6" filter="url(#glow-d2)"><animateMotion path="M 300 478 V 426" dur="2s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#3B82F6" filter="url(#glow-d2)"><animateMotion path="M 300 478 V 426" dur="2s" begin="1.4s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#3B82F6" filter="url(#glow-d2)"><animateMotion path="M 350 406 H 460 V 314" dur="2.8s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#3B82F6" filter="url(#glow-d2)"><animateMotion path="M 350 406 H 460 V 314" dur="2.8s" begin="1.4s" repeatCount="indefinite" /></circle>
+
+          <!-- 2:1 mix through bookcell -->
+          <circle r="8" fill="#3B82F6" stroke="#1D4ED8" filter="url(#glow-d2)"><animateMotion path="M 460 314 H 508 V 412 H 575 V 290" dur="4.2s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="8" fill="#E8C84A" stroke="#A67C00" filter="url(#glow-d2)"><animateMotion path="M 460 314 H 508 V 412 H 575 V 290" dur="4.2s" begin="0.93s" repeatCount="indefinite" /></circle>
+          <circle r="8" fill="#3B82F6" stroke="#1D4ED8" filter="url(#glow-d2)"><animateMotion path="M 460 314 H 508 V 412 H 575 V 290" dur="4.2s" begin="1.86s" repeatCount="indefinite" /></circle>
+          <circle r="8" fill="#3B82F6" stroke="#1D4ED8" filter="url(#glow-d2)"><animateMotion path="M 460 314 H 508 V 412 H 575 V 290" dur="4.2s" begin="2.8s" repeatCount="indefinite" /></circle>
+
+          <g filter="url(#glow-d2)"><animateMotion path="M 575 290 V 280 H 815 V 368" dur="3s" begin="0.4s" repeatCount="indefinite" /><circle r="9" fill="url(#treatingHalf-d2)" stroke="#A67C00" /><text font-size="9" font-weight="700" fill="#111" text-anchor="middle" dy="3">13</text></g>
+          <g filter="url(#glow-d2)"><animateMotion path="M 575 290 V 280 H 815 V 368" dur="3s" begin="1.8s" repeatCount="indefinite" /><circle r="9" fill="#3B82F6" stroke="#1D4ED8" /><text font-size="9" font-weight="700" fill="#fff" text-anchor="middle" dy="3">11</text></g>
+          <g filter="url(#glow-d2)"><animateMotion path="M 575 290 V 280 H 815 V 368" dur="3s" begin="3.2s" repeatCount="indefinite" /><circle r="9" fill="#3B82F6" stroke="#1D4ED8" /><text font-size="9" font-weight="700" fill="#fff" text-anchor="middle" dy="3">15</text></g>
+
+          <circle r="3" fill="#F87171" stroke="#DC2626" filter="url(#glow-d2)"><animateMotion path="M 848 267 V 346" dur="6.4s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="3" fill="#F87171" stroke="#DC2626" filter="url(#glow-d2)"><animateMotion path="M 848 267 V 346" dur="6.4s" begin="3.2s" repeatCount="indefinite" /></circle>
+          <circle r="3" fill="#4ADE80" stroke="#15803D" filter="url(#glow-d2)"><animateMotion path="M 1004 267 V 346" dur="4.8s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="3" fill="#4ADE80" stroke="#15803D" filter="url(#glow-d2)"><animateMotion path="M 1004 267 V 346" dur="4.8s" begin="1.6s" repeatCount="indefinite" /></circle>
+          <circle r="3" fill="#4ADE80" stroke="#15803D" filter="url(#glow-d2)"><animateMotion path="M 1004 267 V 346" dur="4.8s" begin="3.2s" repeatCount="indefinite" /></circle>
+
+          <g filter="url(#glow-d2)"><animateMotion path="M 891 346 V 308 H 971 V 346" dur="2.8s" begin="0.5s" repeatCount="indefinite" /><circle r="9" fill="#3B82F6" stroke="#1D4ED8" /><text font-size="9" font-weight="700" fill="#fff" text-anchor="middle" dy="3">18</text></g>
+          <g filter="url(#glow-d2)"><animateMotion path="M 891 346 V 308 H 971 V 346" dur="2.8s" begin="1.9s" repeatCount="indefinite" /><circle r="9" fill="#3B82F6" stroke="#1D4ED8" /><text font-size="9" font-weight="700" fill="#fff" text-anchor="middle" dy="3">20</text></g>
+
+          <g filter="url(#glow-d2)"><animateMotion path="M 1020 346 V 332 H 1036 V 402 H 1048" dur="3s" begin="0.8s" repeatCount="indefinite" /><circle r="9" fill="#3B82F6" stroke="#16A34A" stroke-width="1.5" /><text font-size="8" font-weight="700" fill="#fff" text-anchor="middle" dy="3">2.4</text></g>
+          <g filter="url(#glow-d2)"><animateMotion path="M 1020 346 V 332 H 1036 V 402 H 1048" dur="3s" begin="2.2s" repeatCount="indefinite" /><circle r="9" fill="#3B82F6" stroke="#16A34A" stroke-width="1.5" /><text font-size="8" font-weight="700" fill="#fff" text-anchor="middle" dy="3">3.0</text></g>
+          <g filter="url(#glow-d2)"><animateMotion path="M 1112 402 H 1142 V 310 H 1191 V 222 H 1270 V 500" dur="5.5s" begin="1.2s" repeatCount="indefinite" /><circle r="9" fill="#3B82F6" stroke="#16A34A" stroke-width="1.5" /><text font-size="8" font-weight="700" fill="#fff" text-anchor="middle" dy="3">2.6</text></g>
+          <g filter="url(#glow-d2)"><animateMotion path="M 1112 402 H 1142 V 310 H 1191 V 222 H 1270 V 500" dur="5.5s" begin="3.4s" repeatCount="indefinite" /><circle r="9" fill="#3B82F6" stroke="#16A34A" stroke-width="1.5" /><text font-size="8" font-weight="700" fill="#fff" text-anchor="middle" dy="3">2.1</text></g>
+
+          <text x="28" y="560" fill="var(--mute)" font-size="12">Process: 50% mac forward / 50% recirc · SW = 2× forward sewage · peri bleach +5 ppm · dechlor ≈3 ppm residual · UV2 polish</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ========== DIAGRAM 3 ========== -->
+  <section class="diag-section" id="d3">
+    <h2>Diagram 3 — 208 V control + sterilize</h2>
+    <p class="desc">Same altered plant in sterilize mode: macerator and V-1 idle; SW pump ON via 208&nbsp;V contactor M1. Aux contacts feed peri bleach (ON) while dechlor is dialed to 1 so Cl₂ stays high (~16–20 ppm) through UV2 for system sterilization.</p>
+
+    <div class="steps" aria-label="Diagram 3 sterilize steps">
+      <h3>Process steps — sterilize (208&nbsp;V)</h3>
+      <ol>
+        <li><strong>Step 1 — Idle sewage path.</strong> V-1 and macerator stay OFF; no sewage feed.
+          <span class="why">Why: sterilize is a clean seawater / chemical loop, not a blackwater process run.</span></li>
+        <li><strong>Step 2 — Energize 208&nbsp;V contactor M1.</strong> Coil pulls in SW pump power; aux contacts R1/R2 seal peri feeds.
+          <span class="why">Why: one motor start also arms chemical pumps so sterilize chemistry cannot run without SW flow.</span></li>
+        <li><strong>Step 3 — SW-only through bookcell into V-2A/B.</strong> Seawater fills / circulates the altered plant train.
+          <span class="why">Why: wets electrodes, piping, and tanks for a kill residual.</span></li>
+        <li><strong>Step 4 — Bleach ON, dechlor dialed to 1.</strong> Peri #1 doses 7% bleach to V-2A; dechlor is minimized so Cl₂ stays high (~16–20&nbsp;ppm).
+          <span class="why">Why: high residual is intentional for system sterilization, not overboard compliance.</span></li>
+        <li><strong>Step 5 — Hold through UV2 to out chest.</strong> High-Cl₂ water passes UV2 / sample point and can exit when authorized.
+          <span class="why">Why: documents the sterilize flow path for USCG / plan review of the altered plant.</span></li>
+      </ol>
+    </div>
+    <div class="diagram-card">
+      <svg class="static-diag" viewBox="0 0 2170 1270" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram 3 208V control and sterilize schematic">
+        <defs>
+          <marker id="ah-d3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--ink)" />
+          </marker>
+          <filter id="glow-d3" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.1" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+        <g transform="scale(1.55)">
+          <!-- MCC panel -->
+          <rect x="28" y="8" width="720" height="110" rx="6" fill="var(--fill-tertiary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="44" y="30" fill="var(--label)" font-size="15" font-weight="700">SW motor control · 208 V</text>
+          <rect x="44" y="44" width="90" height="56" rx="4" fill="var(--fill-secondary)" stroke="var(--ink)" />
+          <text x="89" y="78" text-anchor="middle" fill="var(--label)" font-size="14" font-weight="700">208 V</text>
+          <path d="M 134 72 H 158" fill="none" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#ah-d3)" />
+          <rect x="158" y="44" width="170" height="56" rx="4" fill="var(--fill-secondary)" stroke="#2563EB" stroke-width="2" />
+          <text x="243" y="68" text-anchor="middle" fill="var(--label)" font-size="13" font-weight="700">Contactor M1</text>
+          <text x="243" y="88" text-anchor="middle" fill="#3B82F6" font-size="12" font-weight="700">208 V coil · aux R1/R2</text>
+          <path d="M 328 62 H 352" fill="none" stroke="var(--ink)" stroke-width="2" marker-end="url(#ah-d3)" />
+          <path d="M 328 82 H 352" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#ah-d3)" />
+          <rect x="352" y="44" width="110" height="28" rx="4" fill="var(--fill-secondary)" stroke="#2563EB" stroke-width="2" />
+          <text x="407" y="64" text-anchor="middle" fill="var(--label)" font-size="12" font-weight="700">SW pump</text>
+          <path d="M 462 58 H 486" fill="none" stroke="#DC2626" stroke-width="2" marker-end="url(#ah-d3)" />
+          <path d="M 462 90 H 486" fill="none" stroke="#16A34A" stroke-width="2" marker-end="url(#ah-d3)" />
+          <rect x="486" y="44" width="120" height="28" rx="3" fill="var(--fill-secondary)" stroke="#DC2626" stroke-width="2" />
+          <text x="546" y="64" text-anchor="middle" fill="#DC2626" font-size="12" font-weight="700">Bleach peri</text>
+          <rect x="486" y="80" width="120" height="28" rx="3" fill="var(--fill-secondary)" stroke="#16A34A" stroke-width="2" />
+          <text x="546" y="100" text-anchor="middle" fill="#16A34A" font-size="12" font-weight="700">Dechlor peri</text>
+          <text x="630" y="72" fill="var(--mute)" font-size="12">Peri dial 1–10 · M1 sealed feeds both</text>
+
+          <text x="28" y="140" fill="var(--label)" font-size="15" font-weight="700">Sterilize mode</text>
+
+          <line x1="20" y1="480" x2="1380" y2="480" stroke="var(--soft)" stroke-width="3" />
+          <text x="20" y="498" fill="var(--mute)" font-size="12" font-weight="600">Deck</text>
+          <line x1="20" y1="558" x2="1380" y2="558" stroke="var(--soft)" stroke-width="2" />
+          <text x="20" y="576" fill="var(--mute)" font-size="12" font-weight="600">Hull bottom</text>
+
+          <!-- Idle V-1 / Mac OFF -->
+          <rect x="36" y="256" width="120" height="140" rx="4" fill="var(--fill-tertiary)" stroke="var(--mute)" stroke-width="2" />
+          <text x="96" y="280" text-anchor="middle" fill="var(--mute)" font-size="15" font-weight="700">V-1</text>
+          <text x="96" y="300" text-anchor="middle" fill="var(--mute)" font-size="13">idle</text>
+
+          <rect x="250" y="336" width="100" height="56" rx="4" fill="var(--fill-tertiary)" stroke="var(--mute)" stroke-width="2" />
+          <text x="300" y="362" text-anchor="middle" fill="var(--mute)" font-size="14" font-weight="700">Macerator</text>
+          <text x="300" y="382" text-anchor="middle" fill="#DC2626" font-size="13" font-weight="700">OFF</text>
+
+          <rect x="250" y="436" width="100" height="40" rx="4" fill="var(--fill-secondary)" stroke="#2563EB" stroke-width="2" />
+          <text x="300" y="454" text-anchor="middle" fill="var(--label)" font-size="13" font-weight="700">SW pump</text>
+          <text x="300" y="470" text-anchor="middle" fill="#16A34A" font-size="12" font-weight="700">ON · M1</text>
+          <rect x="264" y="528" width="72" height="30" rx="3" fill="var(--fill-secondary)" stroke="#2563EB" stroke-width="2" />
+          <text x="300" y="548" text-anchor="middle" fill="#3B82F6" font-size="11" font-weight="700">SW sea chest</text>
+
+          <circle cx="460" cy="364" r="9" fill="var(--fill-tertiary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="460" y="348" text-anchor="middle" fill="var(--mute)" font-size="12" font-weight="700">Mix</text>
+
+          <rect x="520" y="340" width="110" height="140" rx="10" fill="var(--fill-primary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="575" y="328" text-anchor="middle" fill="var(--label)" font-size="15" font-weight="700">Bookcell</text>
+
+          <rect x="700" y="396" width="330" height="84" rx="4" fill="var(--fill-secondary)" stroke="var(--ink)" stroke-width="2" />
+          <line x1="947" y1="398" x2="947" y2="478" stroke="var(--ink)" stroke-width="4" />
+          <text x="823" y="424" text-anchor="middle" fill="var(--label)" font-size="15" font-weight="700">V-2A</text>
+          <text x="988" y="424" text-anchor="middle" fill="var(--label)" font-size="15" font-weight="700">V-2B</text>
+          <text x="947" y="470" text-anchor="middle" fill="var(--mute)" font-size="12" font-weight="700">welded plate</text>
+
+          <rect x="802" y="221" width="92" height="64" rx="4" fill="var(--fill-tertiary)" stroke="#DC2626" stroke-width="2" />
+          <text x="848" y="241" text-anchor="middle" fill="var(--label)" font-size="13" font-weight="700">5 gal</text>
+          <text x="848" y="259" text-anchor="middle" fill="#DC2626" font-size="13" font-weight="700">Bleach 7%</text>
+          <text x="848" y="275" text-anchor="middle" fill="var(--mute)" font-size="12">→ V-2A</text>
+          <rect x="820" y="289" width="56" height="28" rx="3" fill="var(--fill-secondary)" stroke="#DC2626" />
+          <text x="848" y="302" text-anchor="middle" fill="var(--label)" font-size="11" font-weight="700">Peri #1 ON</text>
+          <text x="848" y="314" text-anchor="middle" fill="var(--mute)" font-size="10">dial 1–10</text>
+
+          <rect x="958" y="221" width="92" height="64" rx="4" fill="var(--fill-tertiary)" stroke="#16A34A" stroke-width="2" />
+          <text x="1004" y="241" text-anchor="middle" fill="var(--label)" font-size="13" font-weight="700">5 gal</text>
+          <text x="1004" y="259" text-anchor="middle" fill="#16A34A" font-size="13" font-weight="700">20% dechlor</text>
+          <text x="1004" y="275" text-anchor="middle" fill="var(--mute)" font-size="12">→ V-2B</text>
+          <rect x="976" y="289" width="56" height="28" rx="3" fill="var(--fill-tertiary)" stroke="var(--mute)" />
+          <text x="1004" y="302" text-anchor="middle" fill="var(--mute)" font-size="11" font-weight="700">Peri #2</text>
+          <text x="1004" y="314" text-anchor="middle" fill="var(--mute)" font-size="10" font-weight="700">dial 1</text>
+
+          <rect x="1048" y="432" width="64" height="40" rx="3" fill="var(--fill-secondary)" stroke="#DC2626" />
+          <text x="1080" y="456" text-anchor="middle" fill="var(--label)" font-size="12" font-weight="700">Gravity</text>
+
+          <line x1="1142" y1="360" x2="1152" y2="360" stroke="var(--ink)" stroke-width="2.2" />
+          <line x1="1230" y1="272" x2="1240" y2="272" stroke="var(--ink)" stroke-width="2.2" />
+          <line x1="1152" y1="272" x2="1136" y2="272" stroke="var(--ink)" stroke-width="1.8" />
+          <circle cx="1136" cy="272" r="5" fill="var(--fill-secondary)" stroke="var(--accent)" />
+          <text x="1128" y="264" text-anchor="end" fill="var(--accent)" font-size="11" font-weight="700">sample</text>
+          <rect x="1152" y="256" width="78" height="118" rx="12" fill="var(--fill-primary)" stroke="var(--ink)" stroke-width="2" />
+          <text x="1191" y="306" text-anchor="middle" fill="var(--label)" font-size="14" font-weight="700">UV2</text>
+          <text x="1191" y="326" text-anchor="middle" fill="var(--accent)" font-size="12" font-weight="700">PARAMOUNT</text>
+          <rect x="1234" y="532" width="72" height="26" rx="3" fill="var(--fill-secondary)" stroke="var(--ink)" />
+          <text x="1270" y="550" text-anchor="middle" fill="var(--label)" font-size="12" font-weight="700">Out chest</text>
+
+          <!-- SW-only process pipes -->
+          <path d="M 300 528 V 476" fill="none" stroke="#2563EB" stroke-width="2.6" marker-end="url(#ah-d3)" />
+          <path d="M 350 456 H 460 V 364" fill="none" stroke="#2563EB" stroke-width="2.6" marker-end="url(#ah-d3)" />
+          <path d="M 460 364 H 508 V 462 H 575 V 340" fill="none" stroke="#2563EB" stroke-width="2.6" />
+          <path d="M 575 340 V 330 H 815 V 418" fill="none" stroke="#2563EB" stroke-width="2.4" marker-end="url(#ah-d3)" />
+          <path d="M 891 396 V 358 H 971 V 396" fill="none" stroke="var(--ink)" stroke-width="2.4" marker-end="url(#ah-d3)" />
+          <path d="M 848 317 V 396" fill="none" stroke="#DC2626" stroke-width="2.2" marker-end="url(#ah-d3)" />
+          <path d="M 1004 317 V 396" fill="none" stroke="var(--mute)" stroke-width="1.6" stroke-dasharray="4 4" />
+          <path d="M 1020 396 V 382 H 1036 V 452 H 1048" fill="none" stroke="var(--ink)" stroke-width="2.2" marker-end="url(#ah-d3)" />
+          <path d="M 1112 452 H 1142 V 360 H 1152" fill="none" stroke="var(--ink)" stroke-width="2.2" marker-end="url(#ah-d3)" />
+          <path d="M 1152 360 H 1191 V 272 H 1230" fill="none" stroke="var(--ink)" stroke-width="2" />
+          <path d="M 1230 272 H 1270 V 550" fill="none" stroke="var(--ink)" stroke-width="2.2" marker-end="url(#ah-d3)" />
+
+          <!-- Beads: SW sterilize + high Cl -->
+          <circle r="7" fill="#3B82F6" filter="url(#glow-d3)"><animateMotion path="M 300 528 V 476" dur="2s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#3B82F6" filter="url(#glow-d3)"><animateMotion path="M 300 528 V 476" dur="2s" begin="1.4s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#3B82F6" filter="url(#glow-d3)"><animateMotion path="M 350 456 H 460 V 364" dur="2.8s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="7" fill="#3B82F6" filter="url(#glow-d3)"><animateMotion path="M 350 456 H 460 V 364" dur="2.8s" begin="1.4s" repeatCount="indefinite" /></circle>
+          <circle r="8" fill="#3B82F6" filter="url(#glow-d3)"><animateMotion path="M 460 364 H 508 V 462 H 575 V 340 V 330 H 815 V 418" dur="5s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="8" fill="#3B82F6" filter="url(#glow-d3)"><animateMotion path="M 460 364 H 508 V 462 H 575 V 340 V 330 H 815 V 418" dur="5s" begin="1.4s" repeatCount="indefinite" /></circle>
+          <circle r="8" fill="#3B82F6" filter="url(#glow-d3)"><animateMotion path="M 460 364 H 508 V 462 H 575 V 340 V 330 H 815 V 418" dur="5s" begin="2.8s" repeatCount="indefinite" /></circle>
+          <circle r="3" fill="#F87171" stroke="#DC2626" filter="url(#glow-d3)"><animateMotion path="M 848 317 V 396" dur="6.4s" begin="0s" repeatCount="indefinite" /></circle>
+          <circle r="3" fill="#F87171" stroke="#DC2626" filter="url(#glow-d3)"><animateMotion path="M 848 317 V 396" dur="6.4s" begin="3.2s" repeatCount="indefinite" /></circle>
+
+          <g filter="url(#glow-d3)"><animateMotion path="M 891 396 V 358 H 971 V 396" dur="2.8s" begin="0.4s" repeatCount="indefinite" /><circle r="10" fill="#F59E0B" stroke="#DC2626" stroke-width="1.5" /><text font-size="10" font-weight="700" fill="#111" text-anchor="middle" dy="3">18</text></g>
+          <g filter="url(#glow-d3)"><animateMotion path="M 891 396 V 358 H 971 V 396" dur="2.8s" begin="1.8s" repeatCount="indefinite" /><circle r="10" fill="#F59E0B" stroke="#DC2626" stroke-width="1.5" /><text font-size="10" font-weight="700" fill="#111" text-anchor="middle" dy="3">20</text></g>
+          <g filter="url(#glow-d3)"><animateMotion path="M 1020 396 V 382 H 1036 V 452 H 1048" dur="3s" begin="0.6s" repeatCount="indefinite" /><circle r="10" fill="#F59E0B" stroke="#DC2626" stroke-width="1.5" /><text font-size="10" font-weight="700" fill="#111" text-anchor="middle" dy="3">17</text></g>
+          <g filter="url(#glow-d3)"><animateMotion path="M 1020 396 V 382 H 1036 V 452 H 1048" dur="3s" begin="2.0s" repeatCount="indefinite" /><circle r="10" fill="#F59E0B" stroke="#DC2626" stroke-width="1.5" /><text font-size="10" font-weight="700" fill="#111" text-anchor="middle" dy="3">16</text></g>
+          <g filter="url(#glow-d3)"><animateMotion path="M 1112 452 H 1142 V 360 H 1191 V 272 H 1270 V 550" dur="5.5s" begin="1s" repeatCount="indefinite" /><circle r="10" fill="#F59E0B" stroke="#DC2626" stroke-width="1.5" /><text font-size="10" font-weight="700" fill="#111" text-anchor="middle" dy="3">19</text></g>
+          <g filter="url(#glow-d3)"><animateMotion path="M 1112 452 H 1142 V 360 H 1191 V 272 H 1270 V 550" dur="5.5s" begin="3s" repeatCount="indefinite" /><circle r="10" fill="#F59E0B" stroke="#DC2626" stroke-width="1.5" /><text font-size="10" font-weight="700" fill="#111" text-anchor="middle" dy="3">18</text></g>
+
+          <text x="28" y="610" fill="var(--mute)" font-size="12">Sterilize: SW-only through bookcell · bleach ON · dechlor dial 1 · Cl₂ held ~16–20 ppm for system kill · UV2 online</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ========== DIAGRAM 4 (interactive) ========== -->
+  <section class="diag-section" id="d4">
+    <h2>Diagram 4 — Transfer, wash &amp; flush</h2>
+    <p class="desc">Interactive valves · Backwash interlocks with process feed (V-FWD / V-SW-NORM) · Mix ratio 2 SW : 1 sewage. Click any valve; inactive pipes dim; beads follow open paths.</p>
+
+    <div class="steps" id="steps-d4" aria-label="Diagram 4 operating steps">
+      <h3>Operating steps — transfer / wash / flush</h3>
+      <ol>
+        <li><strong>Step 1 — Pick a mode.</strong> Use <em>Process mode</em> (normal treat), <em>Backwash mode</em> (bookcell reverse flush), or <em>Reset defaults</em>.
+          <span class="why">Why: presets set the valve interlocks; you can still click any valve to what-if a lineup.</span></li>
+        <li><strong>Step 2 — Process lineup (typical).</strong> Open V-SW-NORM + V-FWD (+ often V1-MID and V-REC): SW and macerated sewage meet 2:1, through bookcell; backwash BC-FLUSH stays closed.
+          <span class="why">Why: BC-FLUSH interlocks against process feed so you cannot forward-feed and reverse-flush at once.</span></li>
+        <li><strong>Step 3 — Transfer / tank moves.</strong> Use V-U (V-2A↔V-2B), V1/V2 suction valves to the macerator manifold, and MAC-V2 / V-REC as needed for moves and recirculation.
+          <span class="why">Why: Diagram 4 is the rehearsal board for transfers without guessing pipe routes.</span></li>
+        <li><strong>Step 4 — Wash sprays.</strong> Open V-SW-V1 / V-SW-V2A / V-SW-V2B to spray seawater into tanks while watching bead paths.
+          <span class="why">Why: confirms wash water source and which tank interiors are being rinsed.</span></li>
+        <li><strong>Step 5 — Backwash the bookcell.</strong> Press <em>Backwash mode</em> (opens BC-FLUSH, closes process feed). Confirm inactive pipes dim and only flush beads move.
+          <span class="why">Why: reverse flush clears the cell without sending sewage forward.</span></li>
+        <li><strong>Step 6 — Treated overboard.</strong> Open V-GRAV and V-GRAV-OUT for gravity discharge (blue). Keep MAC-OUT / V1-TOP-DRN / V-OVF closed unless intentionally showing untreated (red) paths.
+          <span class="why">Why: red paths are untreated emergencies — leave them closed in normal process demos.</span></li>
+      </ol>
+      <p class="mode-note">Tip: after Process or Backwash, read the valve schedule under the diagram — OPEN rows are the live lineup.</p>
+    </div>
+
+    <div class="toolbar">
+      <button type="button" id="btn-reset">Reset defaults</button>
+      <button type="button" id="btn-process">Process mode</button>
+      <button type="button" id="btn-flush">Backwash mode</button>
+    </div>
+
+    <div class="diagram-card">
+      <svg id="diagram4" viewBox="0 0 2165 1480" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MSD transfer wash flush schematic">
+        <defs>
+          <marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--ink)" />
+          </marker>
+          <filter id="glow4" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.1" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <g id="scene4" transform="scale(1.32)"></g>
+      </svg>
+    </div>
+
+    <section id="schedule">
+      <h3>Valve schedule</h3>
+      <p class="hint">Click any valve on the diagram to toggle OPEN / closed. Schedule updates live. BC-FLUSH interlocks with V-FWD and V-SW-NORM.</p>
+      <div class="sched-grid" id="sched-grid"></div>
+    </section>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var FLUID = {
+    solids: { fill: "#1a1a1a", stroke: "#E8C84A" },
+    sewage: { fill: "#E8C84A", stroke: "#C9A227" },
+    seawater: { fill: "#3B82F6", stroke: "#2563EB" },
+    untreated: { fill: "#F87171", stroke: "#DC2626" }
+  };
+
+  var VALVE_KEY = [
+    { id: "V-SW-V1", name: "SW → V-1", desc: "Seawater spray to V-1" },
+    { id: "V-SW-V2A", name: "SW → V-2A", desc: "Seawater spray to V-2A" },
+    { id: "V-SW-V2B", name: "SW → V-2B", desc: "Seawater spray to V-2B" },
+    { id: "BC-FLUSH", name: "Bookcell backwash", desc: "Reverse flush (interlocks process feed)" },
+    { id: "V-SW-NORM", name: "SW to mix", desc: "Seawater to mix tee / bookcell" },
+    { id: "V1-MID", name: "V-1 +1′ suction", desc: "V-1 mid suction to macerator" },
+    { id: "V1-BOT", name: "V-1 bottom suction", desc: "V-1 bottom suction to macerator" },
+    { id: "V2A-SUCT", name: "V-2A suction", desc: "V-2A to macerator suction" },
+    { id: "V2B-SUCT", name: "V-2B suction", desc: "V-2B to macerator suction" },
+    { id: "V-REC", name: "Mac recirculation", desc: "Macerator return to V-1" },
+    { id: "V-FWD", name: "Mac to bookcell", desc: "Macerator to mix / bookcell" },
+    { id: "MAC-V2", name: "Mac to V-2", desc: "Macerator direct to V-2A" },
+    { id: "MAC-OUT", name: "Mac overboard", desc: "Untreated overboard (red)" },
+    { id: "V1-TOP-DRN", name: "V-1 top drain", desc: "Emergency untreated overboard (red)" },
+    { id: "V-U", name: "V-2 U-line", desc: "V-2A to V-2B transfer" },
+    { id: "V-OVF", name: "Overflow pressure", desc: "V-2B untreated overflow (red)" },
+    { id: "V-GRAV", name: "Gravity suction", desc: "V-2B to gravity pump" },
+    { id: "V-GRAV-OUT", name: "Gravity overboard", desc: "Treated discharge (blue)" }
+  ];
+
+  var DEFAULT_VALVES = {
+    "V-SW-NORM": true,
+    "BC-FLUSH": false,
+    "V-SW-V1": false,
+    "V-SW-V2A": false,
+    "V-SW-V2B": false,
+    "V1-BOT": false,
+    "V1-MID": true,
+    "V2A-SUCT": false,
+    "V2B-SUCT": false,
+    "V-FWD": true,
+    "V-REC": true,
+    "MAC-V2": false,
+    "MAC-OUT": false,
+    "V1-TOP-DRN": true,
+    "V-U": true,
+    "V-OVF": true,
+    "V-GRAV": true,
+    "V-GRAV-OUT": true
+  };
+
+  var valves = Object.assign({}, DEFAULT_VALVES);
+
+  var deck = 460;
+  var hull = deck + 200;
+  var ft = 28;
+  var v1 = { x: 40, w: 120, top: deck - 8 * ft, bot: deck - 3 * ft };
+  var mac = { x: 390, y: v1.bot - 62, w: 105, h: 58 };
+  var sw = { x: 390, y: deck - 22, w: 105, h: 42 };
+  var swChest = { x: 390, y: hull - 28, w: 105, h: 26 };
+  var v1DrainDropX = v1.x + v1.w + 34;
+  var macPanel = { x: v1DrainDropX + 36, y: v1.bot - ft - 48, w: 112, h: 148 };
+  var macManX = macPanel.x + 72;
+  var v2 = { x: 980, w: 340, top: deck - 3 * ft, bot: deck };
+  var macInY = mac.y + mac.h / 2;
+  var macInX = mac.x;
+  var macOutX = mac.x + mac.w;
+  var macOutPanel = { x: macOutX + 14, y: mac.y - 36, w: 108, h: 148 };
+  var macOutManX = macOutPanel.x + 30;
+  var macOutPitch = 28;
+  var macOutV = {
+    rec: macOutPanel.y + 36,
+    bc: macOutPanel.y + 36 + macOutPitch,
+    v2: macOutPanel.y + 36 + macOutPitch * 2,
+    out: macOutPanel.y + 36 + macOutPitch * 3
+  };
+  var macOutManTop = macOutV.rec - 10;
+  var macOutManBot = macOutV.out + 10;
+  var macOutBranchRightX = macOutPanel.x + macOutPanel.w - 8;
+  var macOutBranchLeftX = macOutPanel.x + 6;
+  var mixX = macOutPanel.x + macOutPanel.w + 48;
+  var mixY = macInY;
+  var swPanel = { x: mixX + 16, y: 96, w: 118, h: 158 };
+  var swManX = swPanel.x + 72;
+  var bcBayX = swPanel.x + swPanel.w + 18;
+  var bcBayW = Math.max(110, v2.x - 28 - bcBayX);
+  var bcW = Math.min(100, Math.round(bcBayW * 0.7));
+  var bcTop0 = swPanel.y + swPanel.h + 24;
+  var bcBot0 = macOutV.v2 - 14;
+  var bc = {
+    x: bcBayX + Math.round((bcBayW - bcW) / 2),
+    w: bcW,
+    top: bcTop0,
+    bot: bcBot0
+  };
+  var pump = { x: v2.x + v2.w + 40, y: deck - 56, w: 78, h: 44 };
+  var outChestX = 1520;
+  var v2PlateX = v2.x + v2.w * 0.5;
+  var recircY = v1.top + 52;
+  var v2ABotX = v2.x + v2.w * 0.25;
+  var v2BBotX = v2.x + v2.w * 0.75;
+  var v1BotY = v1.bot;
+  var v1MidY = v1.bot - ft;
+  var leaveY = v2.top - ft * 0.5;
+  var ovfY = v2.top - ft * 1.5;
+  var bcTop = bc.top;
+  var bcBot = bc.bot - 18;
+  var swOutX = sw.x + sw.w;
+  var swMidY = sw.y + sw.h / 2;
+  var underY = deck + 28;
+  var underTop = underY + 78;
+  var swValvePitch = 28;
+  var swV = {
+    v1: swPanel.y + 38,
+    v2b: swPanel.y + 38 + swValvePitch,
+    v2a: swPanel.y + 38 + swValvePitch * 2,
+    flush: swPanel.y + 38 + swValvePitch * 3,
+    norm: swPanel.y + 38 + swValvePitch * 4
+  };
+  var swManTop = swV.v1 - 10;
+  var swManBot = swV.norm + 10;
+  var macCollectY = macPanel.y + 22;
+  var macV = {
+    mid: v1.bot - ft,
+    bot: v1.bot,
+    v2a: v1.bot + 28,
+    v2b: v1.bot + 54
+  };
+  var macManTop = macCollectY - 6;
+  var macManBot = macV.v2b + 10;
+  var macLaneR = {
+    v2a: macPanel.x + macPanel.w - 10,
+    v2b: macPanel.x + macPanel.w - 28
+  };
+  var v1MidValveX = macManX - 22;
+  var v1BotValveX = macManX - 22;
+  var macSuctInX = mac.x;
+  var macSuctInY = macInY;
+  var v1SprayY = v1.top + 34;
+  var v1SprayInX = v1.x + v1.w * 0.55;
+  var v1RecircInX = v1.x + v1.w;
+  var v1TopDrnY = v1.top + 10;
+  var sewageInX = v1.x + 28;
+  var v2ASprayX0 = v2.x + 16;
+  var v2ASprayX1 = v2PlateX - 16;
+  var v2BSprayX0 = v2PlateX + 16;
+  var v2BSprayX1 = v2.x + v2.w - 16;
+  var v2SprayY = v2.top + 22;
+  var v2MacInX = v2.x + 100;
+  var v2GravOutX = v2.x + v2.w - 18;
+  var uFromX = v2PlateX - 18;
+  var uToX = v2PlateX + 18;
+  var v2UTopY = v2.top - ft * 0.85;
+  var v2BSprayInX = uToX + 32;
+  var v2OvfX = (v2BSprayInX + v2GravOutX) / 2;
+  var bcProcessInY = bc.bot - 18;
+  var bcSharedTopX = bc.x + bc.w * 0.45;
+  var bcRightX = bc.x + bc.w;
+  var v2SideInY = v2.top + 42;
+  var pumpInY = pump.y + pump.h / 2;
+  var pumpOutX = pump.x + pump.w;
+  var swBranchRightX = swPanel.x + swPanel.w - 6;
+  var swBranchLeftX = swPanel.x + 6;
+  var keyY = hull + 48;
+
+  var PATHS = {
+    chestToSw: "M " + (swChest.x + swChest.w / 2) + " " + swChest.y + " V " + (sw.y + sw.h),
+    swToMan: "M " + swOutX + " " + swMidY + " H " + swManX + " V " + swManBot,
+    swToMix: "M " + swManX + " " + swV.norm + " H " + swBranchLeftX + " H " + mixX + " V " + mixY,
+    macToDischMan: "M " + macOutX + " " + macInY + " H " + macOutManX,
+    macRec: "M " + macOutManX + " " + macOutV.rec + " H " + macOutBranchLeftX + " V " + recircY + " H " + v1RecircInX,
+    macToMix: "M " + macOutManX + " " + macOutV.bc + " H " + macOutBranchRightX + " H " + mixX + " V " + mixY,
+    macToV2: "M " + macOutManX + " " + macOutV.v2 + " H " + macOutBranchRightX + " H " + v2MacInX + " V " + v2.top,
+    macOverboard: "M " + macOutManX + " " + macOutV.out + " H " + macOutBranchRightX + " V " + (underY + 56) + " H " + outChestX + " V " + (hull - 8),
+    mixThruBc: "M " + mixX + " " + mixY + " H " + (bc.x - 12) + " V " + bcProcessInY + " H " + bc.x + " H " + bcSharedTopX + " V " + bcTop + " H " + (bcRightX + 8) + " V " + v2SideInY + " H " + v2.x,
+    flush: "M " + swManX + " " + swV.flush + " H " + swBranchRightX + " H " + bcSharedTopX + " V " + bcTop + " V " + bcBot + " H " + (bcRightX + 8) + " V " + v2SideInY + " H " + v2.x,
+    swToV1: "M " + swManX + " " + swV.v1 + " H " + swBranchLeftX + " H " + v1SprayInX + " V " + v1.top + " V " + v1SprayY,
+    swToV2A: "M " + swManX + " " + swV.v2a + " H " + swBranchRightX + " H " + ((v2ASprayX0 + v2ASprayX1) / 2) + " V " + v2.top + " V " + v2SprayY,
+    swToV2B: "M " + swManX + " " + swV.v2b + " H " + swBranchRightX + " H " + v2BSprayInX + " V " + v2.top + " V " + v2SprayY,
+    v1Mid: "M " + (v1.x + v1.w) + " " + v1MidY + " H " + v1MidValveX + " H " + macManX,
+    v1Bot: "M " + (v1.x + v1.w) + " " + v1BotY + " H " + v1BotValveX + " H " + macManX,
+    v2ASuct: "M " + v2ABotX + " " + v2.bot + " V " + (underY + 14) + " H " + macLaneR.v2a + " V " + macV.v2a + " H " + macManX,
+    v2BSuct: "M " + v2BBotX + " " + v2.bot + " V " + (underY + 38) + " H " + macLaneR.v2b + " V " + macV.v2b + " H " + macManX,
+    macCollect: "M " + macManX + " " + macCollectY + " V " + macSuctInY + " H " + macSuctInX,
+    v1TopDrn: "M " + (v1.x + v1.w) + " " + v1TopDrnY + " H " + v1DrainDropX + " V " + underTop + " H " + outChestX + " V " + (hull - 8),
+    v2U: "M " + uFromX + " " + v2.top + " V " + v2UTopY + " H " + uToX + " V " + v2.top,
+    ovf: "M " + v2OvfX + " " + v2.top + " V " + ovfY + " H " + outChestX + " V " + (hull - 8),
+    v2toGrav: "M " + v2GravOutX + " " + v2.top + " V " + leaveY + " H " + (pump.x - 18) + " V " + pumpInY + " H " + pump.x,
+    gravToOut: "M " + pumpOutX + " " + pumpInY + " H " + (outChestX - 10) + " V " + (hull - 8),
+    sewageIn: "M " + sewageInX + " " + (v1.top - 36) + " V " + v1.top
+  };
+
+  function orthoPathLen(d) {
+    var tokens = d.match(/[MLHV]|-?\d*\.?\d+/gi) || [];
+    var x = 0, y = 0, len = 0, i = 0;
+    while (i < tokens.length) {
+      var cmd = tokens[i++];
+      if (cmd === "M" || cmd === "L") {
+        var nx = parseFloat(tokens[i++]);
+        var ny = parseFloat(tokens[i++]);
+        if (cmd === "L") len += Math.hypot(nx - x, ny - y);
+        x = nx; y = ny;
+      } else if (cmd === "H") {
+        nx = parseFloat(tokens[i++]);
+        len += Math.abs(nx - x);
+        x = nx;
+      } else if (cmd === "V") {
+        ny = parseFloat(tokens[i++]);
+        len += Math.abs(ny - y);
+        y = ny;
+      }
+    }
+    return Math.max(1, len);
+  }
+
+  function flowDur(pathLen, pxPerSec, gap) {
+    var raw = pathLen / pxPerSec;
+    return Math.max(gap * 2, Math.round(raw / gap) * gap);
+  }
+
+  function evenStarts(count, gap) {
+    var a = [];
+    for (var i = 0; i < count; i++) a.push(i * gap);
+    return a;
+  }
+
+  function open(id) {
+    return valves[id] !== false;
+  }
+
+  function toggle(id) {
+    var turningOn = !open(id);
+    valves[id] = turningOn;
+    if (id === "BC-FLUSH" && turningOn) {
+      valves["V-FWD"] = false;
+      valves["V-SW-NORM"] = false;
+    }
+    if ((id === "V-FWD" || id === "V-SW-NORM") && turningOn) {
+      valves["BC-FLUSH"] = false;
+    }
+    renderDynamic();
+  }
+
+  function el(tag, attrs, children) {
+    var ns = "http://www.w3.org/2000/svg";
+    var node = document.createElementNS(ns, tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        if (attrs[k] == null || attrs[k] === false) return;
+        if (k === "className") node.setAttribute("class", attrs[k]);
+        else if (k === "textContent") node.textContent = attrs[k];
+        else node.setAttribute(k, String(attrs[k]));
+      });
+    }
+    if (children) {
+      (Array.isArray(children) ? children : [children]).forEach(function (c) {
+        if (c == null) return;
+        if (typeof c === "string") node.appendChild(document.createTextNode(c));
+        else node.appendChild(c);
+      });
+    }
+    return node;
+  }
+
+  function text(x, y, str, opts) {
+    opts = opts || {};
+    return el("text", {
+      x: x, y: y,
+      fill: opts.fill || "var(--label)",
+      "font-size": opts.size || 12,
+      "font-weight": opts.weight || 600,
+      "text-anchor": opts.anchor || "start",
+      textContent: str
+    });
+  }
+
+  function rect(x, y, w, h, opts) {
+    opts = opts || {};
+    return el("rect", {
+      x: x, y: y, width: w, height: h, rx: opts.rx || 4,
+      fill: opts.fill || "var(--fill-secondary)",
+      stroke: opts.stroke || "var(--ink)",
+      "stroke-width": opts.sw || 2
+    });
+  }
+
+  function circle(cx, cy, r, opts) {
+    opts = opts || {};
+    return el("circle", {
+      cx: cx, cy: cy, r: r,
+      fill: opts.fill || "var(--fill-secondary)",
+      stroke: opts.stroke || "var(--ink)",
+      "stroke-width": opts.sw || 1.5
+    });
+  }
+
+  function line(x1, y1, x2, y2, opts) {
+    opts = opts || {};
+    return el("line", {
+      x1: x1, y1: y1, x2: x2, y2: y2,
+      stroke: opts.stroke || "var(--soft)",
+      "stroke-width": opts.sw || 2,
+      "stroke-dasharray": opts.dash || null,
+      opacity: opts.opacity != null ? opts.opacity : null
+    });
+  }
+
+  function path(d, opts) {
+    opts = opts || {};
+    return el("path", {
+      d: d,
+      fill: "none",
+      stroke: opts.stroke || "var(--ink)",
+      "stroke-width": opts.sw || 2,
+      opacity: opts.opacity != null ? opts.opacity : null,
+      "marker-end": opts.marker || null,
+      "stroke-dasharray": opts.dash || null,
+      "stroke-linecap": opts.cap || null
+    });
+  }
+
+  var scene = document.getElementById("scene4");
+  var flowsG, beadsG, valvesG;
+  var valveNodes = {};
+
+  function buildStatic() {
+    scene.innerHTML = "";
+
+    scene.appendChild(rect(28, 6, 980, 56, { rx: 6, fill: "var(--fill-tertiary)", stroke: "var(--soft)", sw: 1 }));
+    scene.appendChild(text(44, 30, "Transfer, wash & flush schematic", { size: 17, weight: 700 }));
+    scene.appendChild(text(44, 50, "Interactive valves · Backwash interlocks with process feed · Mix 2 SW : 1 sewage", { size: 12, fill: "var(--mute)", weight: 500 }));
+
+    scene.appendChild(circle(780, 22, 6, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke }));
+    scene.appendChild(text(792, 26, "Seawater / treated", { size: 11, weight: 600 }));
+    scene.appendChild(circle(780, 42, 6, { fill: FLUID.sewage.fill, stroke: FLUID.sewage.stroke }));
+    scene.appendChild(text(792, 46, "Sewage", { size: 11, weight: 600 }));
+    scene.appendChild(circle(920, 22, 6, { fill: FLUID.untreated.fill, stroke: FLUID.untreated.stroke }));
+    scene.appendChild(text(932, 26, "Untreated overboard", { size: 11, weight: 600 }));
+    scene.appendChild(circle(920, 42, 6, { fill: FLUID.solids.fill, stroke: FLUID.sewage.stroke, sw: 2 }));
+    scene.appendChild(text(932, 46, "Solids", { size: 11, weight: 600 }));
+
+    scene.appendChild(line(20, deck, 1600, deck, { stroke: "var(--soft)", sw: 3 }));
+    scene.appendChild(text(20, deck + 16, "Deck", { size: 13, fill: "var(--mute)", weight: 600 }));
+    scene.appendChild(line(20, hull, 1600, hull, { stroke: "var(--soft)", sw: 2 }));
+    scene.appendChild(text(20, hull + 16, "Hull", { size: 13, fill: "var(--mute)", weight: 600 }));
+    scene.appendChild(text(900, underY + 4, "Below deck", { size: 13, fill: "var(--accent)", weight: 700 }));
+
+    scene.appendChild(line(v1.x - 14, v1.bot, v1.x - 6, v1.bot, { stroke: "var(--mute)", sw: 1 }));
+    scene.appendChild(text(v1.x - 18, v1.bot + 4, "0′", { size: 11, fill: "var(--mute)", anchor: "end", weight: 500 }));
+    scene.appendChild(line(v1.x - 14, v1MidY, v1.x - 6, v1MidY, { stroke: "var(--mute)", sw: 1 }));
+    scene.appendChild(text(v1.x - 18, v1MidY + 4, "1′", { size: 11, fill: "var(--mute)", anchor: "end", weight: 500 }));
+
+    scene.appendChild(rect(v1.x, v1.top, v1.w, v1.bot - v1.top, { rx: 4 }));
+    scene.appendChild(text(v1.x + v1.w / 2, v1.top + 24, "V-1", { size: 16, weight: 700, anchor: "middle" }));
+    scene.appendChild(line(v1.x + 14, v1SprayY, v1.x + v1.w - 14, v1SprayY, { stroke: FLUID.seawater.stroke, sw: 2 }));
+    for (var i = 0; i < 5; i++) {
+      scene.appendChild(line(v1.x + 22 + i * 20, v1SprayY, v1.x + 22 + i * 20, v1SprayY + 10, { stroke: FLUID.seawater.stroke, sw: 1.5 }));
+    }
+    scene.appendChild(text(v1.x + v1.w / 2, v1SprayY - 8, "Spray", { size: 11, fill: FLUID.seawater.fill, weight: 700, anchor: "middle" }));
+    scene.appendChild(path(PATHS.sewageIn, { stroke: FLUID.solids.stroke, sw: 2.2, marker: "url(#ah4)" }));
+    scene.appendChild(circle(sewageInX, v1.top, 4, { fill: FLUID.solids.fill, stroke: FLUID.solids.stroke }));
+    scene.appendChild(text(sewageInX, v1.top - 44, "Sewage in", { size: 12, weight: 700, anchor: "middle" }));
+    scene.appendChild(circle(v1SprayInX, v1.top, 4, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke }));
+    scene.appendChild(circle(v1RecircInX, recircY, 4, { stroke: "var(--accent)" }));
+    scene.appendChild(circle(v1.x + v1.w, v1TopDrnY, 4, { stroke: FLUID.untreated.stroke }));
+    scene.appendChild(text(v1.x + v1.w / 2, v1TopDrnY - 8, "Top drain", { size: 11, fill: FLUID.untreated.stroke, weight: 700, anchor: "middle" }));
+    scene.appendChild(circle(v1.x + v1.w, v1BotY, 4, {}));
+    scene.appendChild(circle(v1.x + v1.w, v1MidY, 4, {}));
+
+    scene.appendChild(rect(macPanel.x, macPanel.y, macPanel.w, macPanel.h, { rx: 6, fill: "var(--fill-tertiary)", stroke: "var(--soft)", sw: 1.5 }));
+    scene.appendChild(text(macPanel.x + 8, macPanel.y + 18, "Mac suction", { size: 11, fill: "var(--accent)", weight: 700 }));
+    scene.appendChild(line(macManX, macManTop, macManX, macManBot, { stroke: "var(--ink)", sw: 4 }));
+
+    scene.appendChild(rect(mac.x, mac.y, mac.w, mac.h, { rx: 4 }));
+    scene.appendChild(text(mac.x + mac.w / 2, mac.y + 36, "Macerator", { size: 14, weight: 700, anchor: "middle" }));
+    scene.appendChild(circle(macSuctInX, macSuctInY, 4, {}));
+    scene.appendChild(circle(macOutX, macInY, 4, {}));
+    scene.appendChild(line(macLaneR.v2b, macV.v2a - 8, macLaneR.v2b, macV.v2b + 8, { stroke: "var(--soft)", sw: 1, dash: "2 3", opacity: 0.4 }));
+    scene.appendChild(line(macLaneR.v2a, macV.v2a - 8, macLaneR.v2a, macV.v2b + 8, { stroke: "var(--soft)", sw: 1, dash: "2 3", opacity: 0.4 }));
+
+    scene.appendChild(rect(macOutPanel.x, macOutPanel.y, macOutPanel.w, macOutPanel.h, { rx: 6, fill: "var(--fill-tertiary)", stroke: FLUID.sewage.stroke, sw: 1.5 }));
+    scene.appendChild(text(macOutPanel.x + 6, macOutPanel.y + 18, "Mac discharge", { size: 11, fill: FLUID.sewage.fill, weight: 700 }));
+    scene.appendChild(line(macOutManX, macOutManTop, macOutManX, macOutManBot, { stroke: FLUID.sewage.stroke, sw: 4 }));
+
+    scene.appendChild(rect(swChest.x, swChest.y, swChest.w, swChest.h, { rx: 3, stroke: FLUID.seawater.stroke, sw: 1.5 }));
+    scene.appendChild(text(swChest.x + swChest.w / 2, swChest.y + 18, "SW sea chest", { size: 12, fill: FLUID.seawater.fill, weight: 700, anchor: "middle" }));
+    scene.appendChild(rect(sw.x, sw.y, sw.w, sw.h, { rx: 4, stroke: FLUID.seawater.stroke, sw: 2 }));
+    scene.appendChild(text(sw.x + sw.w / 2, sw.y + 28, "SW pump", { size: 14, fill: FLUID.seawater.fill, weight: 700, anchor: "middle" }));
+
+    scene.appendChild(rect(swPanel.x, swPanel.y, swPanel.w, swPanel.h, { rx: 5, fill: "var(--fill-tertiary)", stroke: FLUID.seawater.stroke, sw: 1.5 }));
+    scene.appendChild(text(swPanel.x + 8, swPanel.y + 18, "SW manifold", { size: 11, fill: FLUID.seawater.fill, weight: 700 }));
+    scene.appendChild(line(swManX, swManTop, swManX, swManBot, { stroke: FLUID.seawater.stroke, sw: 4 }));
+
+    scene.appendChild(circle(mixX, mixY, 10, { fill: "var(--fill-tertiary)", stroke: "var(--ink)", sw: 2 }));
+    scene.appendChild(text(mixX, mixY - 18, "Mix 2:1", { size: 13, weight: 700, anchor: "middle" }));
+    scene.appendChild(text(mixX, mixY + 24, "2 SW : 1 sewage", { size: 11, fill: "var(--mute)", weight: 500, anchor: "middle" }));
+
+    scene.appendChild(rect(bc.x, bc.top, bc.w, bc.bot - bc.top, { rx: 8, fill: "var(--fill-primary)" }));
+    scene.appendChild(text(bc.x + bc.w / 2, (bc.top + bc.bot) / 2 + 5, "Bookcell", { size: 14, weight: 700, anchor: "middle" }));
+    scene.appendChild(circle(bc.x, bcProcessInY, 4, {}));
+    scene.appendChild(circle(bcSharedTopX, bcTop, 4, { stroke: "var(--accent)" }));
+
+    scene.appendChild(rect(v2.x, v2.top, v2.w, v2.bot - v2.top, { rx: 4 }));
+    scene.appendChild(line(v2PlateX, v2.top + 2, v2PlateX, v2.bot - 2, { stroke: "var(--ink)", sw: 4 }));
+    scene.appendChild(text((v2.x + v2PlateX) / 2, v2.top + 56, "V-2A", { size: 16, weight: 700, anchor: "middle" }));
+    scene.appendChild(text((v2PlateX + v2.x + v2.w) / 2, v2.top + 56, "V-2B", { size: 16, weight: 700, anchor: "middle" }));
+    scene.appendChild(line(v2ASprayX0, v2SprayY, v2ASprayX1, v2SprayY, { stroke: FLUID.seawater.stroke, sw: 2 }));
+    scene.appendChild(line(v2BSprayX0, v2SprayY, v2BSprayX1, v2SprayY, { stroke: FLUID.seawater.stroke, sw: 2 }));
+    for (i = 0; i < 3; i++) {
+      scene.appendChild(line(v2ASprayX0 + 14 + i * 24, v2SprayY, v2ASprayX0 + 14 + i * 24, v2SprayY + 8, { stroke: FLUID.seawater.stroke, sw: 1.4 }));
+      scene.appendChild(line(v2BSprayX0 + 12 + i * 20, v2SprayY, v2BSprayX0 + 12 + i * 20, v2SprayY + 8, { stroke: FLUID.seawater.stroke, sw: 1.4 }));
+    }
+    scene.appendChild(circle(v2.x, v2SideInY, 4, { stroke: "var(--accent)" }));
+    scene.appendChild(circle(v2MacInX, v2.top, 4, { fill: FLUID.sewage.fill, stroke: FLUID.sewage.stroke }));
+    scene.appendChild(circle(uFromX, v2.top, 4, {}));
+    scene.appendChild(circle(uToX, v2.top, 4, {}));
+    scene.appendChild(circle(v2BSprayInX, v2.top, 4, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke }));
+    scene.appendChild(circle(v2OvfX, v2.top, 4, { fill: FLUID.untreated.fill, stroke: FLUID.untreated.stroke }));
+    scene.appendChild(circle(v2GravOutX, v2.top, 4, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke }));
+    scene.appendChild(circle((v2ASprayX0 + v2ASprayX1) / 2, v2.top, 3.5, { fill: FLUID.seawater.fill, stroke: FLUID.seawater.stroke, sw: 1.2 }));
+    scene.appendChild(circle(v2ABotX, v2.bot, 4, {}));
+    scene.appendChild(circle(v2BBotX, v2.bot, 4, {}));
+    scene.appendChild(text((uFromX + uToX) / 2, v2UTopY - 8, "U-line", { size: 12, weight: 700, anchor: "middle" }));
+
+    var gravPump = rect(pump.x, pump.y, pump.w, pump.h, { rx: 3, stroke: "var(--mute)", sw: 2 });
+    gravPump.setAttribute("id", "grav-pump");
+    scene.appendChild(gravPump);
+    scene.appendChild(text(pump.x + pump.w / 2, pump.y + 20, "Gravity", { size: 13, weight: 700, anchor: "middle" }));
+    scene.appendChild(text(pump.x + pump.w / 2, pump.y + 36, "pump", { size: 11, fill: "var(--mute)", weight: 500, anchor: "middle" }));
+
+    scene.appendChild(rect(outChestX - 48, hull - 30, 96, 30, { rx: 3, sw: 1.5 }));
+    scene.appendChild(text(outChestX, hull - 10, "Out chest", { size: 13, weight: 700, anchor: "middle" }));
+
+    scene.appendChild(path(PATHS.chestToSw, { stroke: FLUID.seawater.stroke, sw: 2, opacity: 0.7 }));
+    scene.appendChild(path(PATHS.swToMan, { stroke: FLUID.seawater.stroke, sw: 2.4 }));
+
+    scene.appendChild(text(v2OvfX, ovfY - 22, "Overflow pressure", { size: 12, fill: FLUID.untreated.stroke, weight: 700, anchor: "middle" }));
+
+    flowsG = el("g", { id: "flows4" });
+    beadsG = el("g", { id: "beads4" });
+    valvesG = el("g", { id: "valves4" });
+    scene.appendChild(flowsG);
+    scene.appendChild(beadsG);
+    scene.appendChild(valvesG);
+
+    scene.appendChild(rect(28, keyY, 1560, 220, { rx: 6, fill: "var(--fill-tertiary)", stroke: "var(--soft)", sw: 1 }));
+    scene.appendChild(text(44, keyY + 26, "Valve schedule — click a valve to toggle open / closed", { size: 15, weight: 700 }));
+    var schedSvg = el("g", { id: "sched-svg" });
+    scene.appendChild(schedSvg);
+  }
+
+  function flowSeg(d, active, color) {
+    return path(d, {
+      stroke: active ? color : "var(--mute)",
+      sw: active ? 2.5 : 1.5,
+      dash: active ? null : "5 4",
+      opacity: active ? 1 : 0.3,
+      marker: active ? "url(#ah4)" : null
+    });
+  }
+
+  function makeValve(id, x, y, tagDx, tagDy) {
+    var g = el("g", { className: "valve-hit", "data-id": id });
+    g.addEventListener("click", function () { toggle(id); });
+    valveNodes[id] = { g: g, x: x, y: y, tagDx: tagDx, tagDy: tagDy };
+    valvesG.appendChild(g);
+    return g;
+  }
+
+  function paintValve(id) {
+    var meta = valveNodes[id];
+    if (!meta) return;
+    var g = meta.g;
+    while (g.firstChild) g.removeChild(g.firstChild);
+    var x = meta.x, y = meta.y, tagDx = meta.tagDx, tagDy = meta.tagDy;
+    var isOpen = open(id);
+    var vz = 8;
+    var fillA = isOpen ? "var(--fill-secondary)" : "var(--fill-tertiary)";
+    var fillB = isOpen ? "var(--bg-elevated)" : "var(--fill-tertiary)";
+    var stroke = isOpen ? "var(--ink)" : "var(--mute)";
+    var stateLabel = isOpen ? "OPEN" : "CLOSED";
+    var stateColor = isOpen ? "#2F9E44" : "var(--mute)";
+    var tx = x + tagDx;
+    var ty = y + tagDy;
+    var anchor = tagDx < 0 ? "end" : tagDx > 0 ? "start" : "middle";
+    var stateDy = tagDx !== 0 ? 13 : (tagDy >= 0 ? 13 : -13);
+
+    g.appendChild(circle(x, y, 16, { fill: "transparent", stroke: "none", sw: 0 }));
+    var p1 = el("path", {
+      d: "M " + (x - vz) + " " + (y - vz) + " L " + (x + vz) + " " + y + " L " + (x - vz) + " " + (y + vz) + " Z",
+      fill: fillA, stroke: stroke, "stroke-width": 1.4, class: "valve-body"
+    });
+    var p2 = el("path", {
+      d: "M " + (x + vz) + " " + (y - vz) + " L " + (x - vz) + " " + y + " L " + (x + vz) + " " + (y + vz) + " Z",
+      fill: fillB, stroke: stroke, "stroke-width": 1.4, class: "valve-body"
+    });
+    g.appendChild(p1);
+    g.appendChild(p2);
+    if (!isOpen) {
+      g.appendChild(line(x - vz - 1, y - vz - 1, x + vz + 1, y + vz + 1, { stroke: "var(--mute)", sw: 2 }));
+    }
+    g.appendChild(text(tx, ty + 3, id, { size: 11, fill: "var(--accent)", weight: 700, anchor: anchor }));
+    g.appendChild(text(tx, ty + 3 + stateDy, stateLabel, { size: 9, fill: stateColor, weight: 700, anchor: anchor }));
+  }
+
+  function bead(pathD, dur, begin, fill, ring) {
+    var c = el("circle", {
+      r: ring ? 7.5 : 7,
+      fill: fill,
+      stroke: ring || fill,
+      "stroke-width": ring ? 2.2 : 1,
+      "stroke-opacity": ring ? 1 : 0.35,
+      filter: "url(#glow4)"
+    });
+    var am = el("animateMotion", {
+      path: pathD,
+      dur: dur + "s",
+      begin: begin + "s",
+      repeatCount: "indefinite"
+    });
+    am.setAttributeNS(null, "path", pathD);
+    c.appendChild(am);
+    beadsG.appendChild(c);
+  }
+
+  function beads(active, pathD, starts, dur, fill, ring) {
+    if (!active) return;
+    for (var i = 0; i < starts.length; i++) {
+      bead(pathD, dur, starts[i], fill, ring);
+    }
+  }
+
+  function renderDynamic() {
+    while (flowsG.firstChild) flowsG.removeChild(flowsG.firstChild);
+    while (beadsG.firstChild) beadsG.removeChild(beadsG.firstChild);
+
+    var swToMixOn = open("V-SW-NORM");
+    var macToMixOn = open("V-FWD");
+    var mixThruOn = swToMixOn || macToMixOn;
+
+    flowsG.appendChild(flowSeg(PATHS.swToMix, swToMixOn, FLUID.seawater.stroke));
+    flowsG.appendChild(flowSeg(PATHS.macToDischMan, open("V-REC") || open("V-FWD") || open("MAC-V2") || open("MAC-OUT"), FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.macRec, open("V-REC"), FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.macToMix, macToMixOn, FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.macToV2, open("MAC-V2"), FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.macOverboard, open("MAC-OUT"), FLUID.untreated.stroke));
+    flowsG.appendChild(flowSeg(PATHS.mixThruBc, mixThruOn, FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.flush, open("BC-FLUSH"), FLUID.seawater.stroke));
+    flowsG.appendChild(flowSeg(PATHS.swToV1, open("V-SW-V1"), FLUID.seawater.stroke));
+    flowsG.appendChild(flowSeg(PATHS.swToV2A, open("V-SW-V2A"), FLUID.seawater.stroke));
+    flowsG.appendChild(flowSeg(PATHS.swToV2B, open("V-SW-V2B"), FLUID.seawater.stroke));
+    flowsG.appendChild(flowSeg(PATHS.v1Bot, open("V1-BOT"), FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.v1Mid, open("V1-MID"), FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.v2ASuct, open("V2A-SUCT"), FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.v2BSuct, open("V2B-SUCT"), FLUID.sewage.stroke));
+    flowsG.appendChild(flowSeg(PATHS.macCollect, open("V1-BOT") || open("V1-MID") || open("V2A-SUCT") || open("V2B-SUCT"), "var(--ink)"));
+    flowsG.appendChild(flowSeg(PATHS.v2U, open("V-U"), FLUID.seawater.stroke));
+    flowsG.appendChild(flowSeg(PATHS.v1TopDrn, open("V1-TOP-DRN"), FLUID.untreated.stroke));
+    flowsG.appendChild(flowSeg(PATHS.ovf, open("V-OVF"), FLUID.untreated.stroke));
+    flowsG.appendChild(flowSeg(PATHS.v2toGrav, open("V-GRAV"), FLUID.seawater.stroke));
+    flowsG.appendChild(flowSeg(PATHS.gravToOut, open("V-GRAV") && open("V-GRAV-OUT"), FLUID.seawater.stroke));
+
+    var mixUnit = 1.6;
+    var mixFwdUnit = mixUnit * 2;
+    var mixGap = mixFwdUnit / 3;
+    var mixFlowV = 72;
+    var swToMixDur = flowDur(orthoPathLen(PATHS.swToMix), mixFlowV, mixUnit);
+    var macToMixDur = flowDur(orthoPathLen(PATHS.macToMix), mixFlowV, mixFwdUnit);
+    var mixThruDur = flowDur(orthoPathLen(PATHS.mixThruBc), mixFlowV, mixGap);
+    var swToMixStarts = evenStarts(Math.max(2, Math.round(swToMixDur / mixUnit)), mixUnit);
+    var macToMixStarts = evenStarts(Math.max(2, Math.round(macToMixDur / mixFwdUnit)), mixFwdUnit);
+    var mixCount = Math.max(3, Math.round(mixThruDur / mixGap / 3) * 3);
+
+    beads(swToMixOn, PATHS.swToMix, swToMixStarts, swToMixDur, FLUID.seawater.fill);
+    beads(macToMixOn, PATHS.macToMix, macToMixStarts, macToMixDur, FLUID.sewage.fill);
+
+    if (mixThruOn) {
+      var starts = evenStarts(mixCount, mixGap);
+      for (var mi = 0; mi < starts.length; mi++) {
+        var color;
+        if (swToMixOn && macToMixOn) color = mi % 3 === 1 ? "yellow" : "blue";
+        else color = macToMixOn ? "yellow" : "blue";
+        bead(
+          PATHS.mixThruBc,
+          mixThruDur,
+          starts[mi],
+          color === "yellow" ? FLUID.sewage.fill : FLUID.seawater.fill,
+          color === "yellow" ? "#A67C00" : "#1D4ED8"
+        );
+      }
+    }
+
+    beads(open("BC-FLUSH"), PATHS.flush, evenStarts(3, 2.0), 5.5, FLUID.seawater.fill);
+    beads(open("V-SW-V1"), PATHS.swToV1, evenStarts(2, 2.0), 4.0, FLUID.seawater.fill);
+    beads(open("V-SW-V2A"), PATHS.swToV2A, evenStarts(2, 2.2), 4.5, FLUID.seawater.fill);
+    beads(open("V-SW-V2B"), PATHS.swToV2B, evenStarts(2, 2.4), 4.8, FLUID.seawater.fill);
+    beads(open("V1-BOT"), PATHS.v1Bot, evenStarts(2, 2.0), 3.8, FLUID.solids.fill, FLUID.sewage.stroke);
+    beads(open("V1-MID"), PATHS.v1Mid, evenStarts(2, 2.2), 3.8, FLUID.sewage.fill);
+    beads(open("V2A-SUCT"), PATHS.v2ASuct, evenStarts(2, 2.4), 5.5, FLUID.sewage.fill);
+    beads(open("V2B-SUCT"), PATHS.v2BSuct, evenStarts(2, 2.6), 5.8, FLUID.sewage.fill);
+    beads(open("V1-BOT") || open("V1-MID") || open("V2A-SUCT") || open("V2B-SUCT"), PATHS.macCollect, evenStarts(2, 1.8), 2.4, FLUID.sewage.fill);
+    beads(open("V-REC") || open("V-FWD") || open("MAC-V2") || open("MAC-OUT"), PATHS.macToDischMan, evenStarts(2, 1.5), 1.8, FLUID.sewage.fill);
+    beads(open("V-REC"), PATHS.macRec, evenStarts(2, 2.2), 4.2, FLUID.sewage.fill);
+    beads(open("MAC-V2"), PATHS.macToV2, evenStarts(2, 2.4), 5.0, FLUID.sewage.fill);
+    beads(open("MAC-OUT"), PATHS.macOverboard, evenStarts(2, 2.6), 5.5, FLUID.untreated.fill);
+    beads(open("V-U"), PATHS.v2U, evenStarts(2, 2.0), 3.4, FLUID.seawater.fill);
+    beads(open("V1-TOP-DRN"), PATHS.v1TopDrn, evenStarts(2, 2.8), 5.5, FLUID.untreated.fill);
+    beads(open("V-OVF"), PATHS.ovf, evenStarts(2, 3.0), 5.0, FLUID.untreated.fill);
+    beads(open("V-GRAV"), PATHS.v2toGrav, evenStarts(2, 2.2), 4.0, FLUID.seawater.fill);
+    beads(open("V-GRAV") && open("V-GRAV-OUT"), PATHS.gravToOut, evenStarts(2, 2.4), 3.8, FLUID.seawater.fill);
+
+    Object.keys(valveNodes).forEach(paintValve);
+
+    var gp = document.getElementById("grav-pump");
+    if (gp) {
+      gp.setAttribute("stroke", open("V-GRAV") && open("V-GRAV-OUT") ? FLUID.seawater.stroke : "var(--mute)");
+    }
+
+    updateSchedule();
+  }
+
+  function placeValves() {
+    valvesG.innerHTML = "";
+    valveNodes = {};
+    makeValve("V-SW-V1", swManX, swV.v1, 18, -2);
+    makeValve("V-SW-V2B", swManX, swV.v2b, -16, -2);
+    makeValve("V-SW-V2A", swManX, swV.v2a, -16, -2);
+    makeValve("BC-FLUSH", swManX, swV.flush, -16, -2);
+    makeValve("V-SW-NORM", swManX, swV.norm, 18, -2);
+    makeValve("V1-MID", v1MidValveX, macV.mid, -16, -2);
+    makeValve("V1-BOT", v1BotValveX, macV.bot, -16, -2);
+    makeValve("V2A-SUCT", macManX, macV.v2a, 18, -2);
+    makeValve("V2B-SUCT", macManX, macV.v2b, 18, -2);
+    makeValve("V-REC", macOutManX, macOutV.rec, 18, -2);
+    makeValve("V-FWD", macOutManX, macOutV.bc, 18, -2);
+    makeValve("MAC-V2", macOutManX, macOutV.v2, 18, -2);
+    makeValve("MAC-OUT", macOutManX, macOutV.out, 18, -2);
+    makeValve("V-U", (uFromX + uToX) / 2, v2UTopY, 0, -18);
+    makeValve("V1-TOP-DRN", v1DrainDropX, v1TopDrnY, 0, -20);
+    makeValve("V-OVF", v2OvfX, ovfY, 0, -20);
+    makeValve("V-GRAV", pump.x - 18, leaveY, 0, -20);
+    makeValve("V-GRAV-OUT", pumpOutX + 40, pumpInY, 0, 20);
+  }
+
+  function updateSchedule() {
+    var grid = document.getElementById("sched-grid");
+    grid.innerHTML = "";
+    VALVE_KEY.forEach(function (v) {
+      var isOpen = open(v.id);
+      var row = document.createElement("div");
+      row.className = "sched-row " + (isOpen ? "open" : "closed");
+      row.innerHTML =
+        '<span class="id">' + v.id + "</span>" +
+        '<span class="desc">' + v.desc + "</span>" +
+        '<span class="state">' + (isOpen ? "OPEN" : "closed") + "</span>";
+      grid.appendChild(row);
+    });
+
+    var schedSvg = document.getElementById("sched-svg");
+    if (schedSvg) {
+      while (schedSvg.firstChild) schedSvg.removeChild(schedSvg.firstChild);
+      VALVE_KEY.forEach(function (v, i) {
+        var col = i % 3;
+        var row = Math.floor(i / 3);
+        var x = 44 + col * 520;
+        var y = keyY + 52 + row * 24;
+        var isOpen = open(v.id);
+        schedSvg.appendChild(text(
+          x, y,
+          v.id + " — " + v.desc + (isOpen ? "  · OPEN" : "  · closed"),
+          { size: 13, fill: isOpen ? "var(--accent)" : "var(--mute)", weight: isOpen ? 700 : 500 }
+        ));
+      });
+    }
+  }
+
+  document.getElementById("btn-reset").addEventListener("click", function () {
+    valves = Object.assign({}, DEFAULT_VALVES);
+    renderDynamic();
+  });
+  document.getElementById("btn-process").addEventListener("click", function () {
+    valves = Object.assign({}, DEFAULT_VALVES, {
+      "BC-FLUSH": false,
+      "V-SW-NORM": true,
+      "V-FWD": true,
+      "V1-MID": true,
+      "V-REC": true
+    });
+    renderDynamic();
+  });
+  document.getElementById("btn-flush").addEventListener("click", function () {
+    valves = Object.assign({}, DEFAULT_VALVES, {
+      "BC-FLUSH": true,
+      "V-SW-NORM": false,
+      "V-FWD": false
+    });
+    renderDynamic();
+  });
+
+  buildStatic();
+  placeValves();
+  renderDynamic();
+})();
+</script>
+</body>
+</html>
+
