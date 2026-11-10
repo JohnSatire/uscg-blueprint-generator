@@ -299,6 +299,96 @@
     color: var(--accent);
   }
 
+
+  .edit-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .edit-bar strong {
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-right: 4px;
+  }
+  .edit-bar button, .edit-bar label {
+    background: var(--fill-secondary);
+    color: var(--label);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .edit-bar button.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--fill-secondary));
+  }
+  .edit-bar button:hover { border-color: var(--accent); }
+  .edit-bar .hint {
+    flex: 1 1 220px;
+    color: var(--mute);
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+  .edit-bar select, .edit-bar input[type="number"] {
+    background: var(--fill-secondary);
+    color: var(--label);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 0.85rem;
+  }
+  .diagram-card.edit-enabled {
+    outline: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  .diagram-card.edit-enabled svg {
+    cursor: default;
+  }
+  .movable-selected {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .connect-preview {
+    pointer-events: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    fill: none;
+  }
+  .user-link {
+    stroke: var(--accent);
+    stroke-width: 2.4;
+    fill: none;
+    marker-end: url(#edit-arrow);
+  }
+  .user-link-hit {
+    stroke: transparent;
+    stroke-width: 14;
+    fill: none;
+    cursor: pointer;
+  }
+  .snap-ghost {
+    pointer-events: none;
+    stroke: var(--accent);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+    fill: none;
+    opacity: 0.7;
+  }
+  @media print {
+    .edit-bar { display: none !important; }
+  }
+
   @media print {
     :root {
       --bg: #fff;
@@ -328,7 +418,7 @@
 <div class="wrap">
   <header class="page-head">
     <h1>MSD line diagrams — proposal package</h1>
-    <p>Offline proposal schematics for as-built, altered plant, 208&nbsp;V sterilize control, and interactive transfer / wash / flush — now with numbered step explanations under each diagram. Open via file:// or the hosted link; no network required for the diagrams themselves.</p>
+    <p>Offline proposal schematics for as-built, altered plant, 208&nbsp;V sterilize control, and interactive transfer / wash / flush — now with numbered step explanations, plus right-click move / snap / connect-line editing. Open via file:// or the hosted link; no network required for the diagrams themselves.</p>
   </header>
 
   <nav class="sticky-nav" aria-label="Diagram jump links">
@@ -338,6 +428,20 @@
     <a href="#d3">3 · 208 V control + sterilize</a>
     <a href="#d4">4 · Transfer, wash &amp; flush</a>
   </nav>
+
+  <div class="edit-bar" id="edit-bar" role="toolbar" aria-label="Schematic edit tools">
+    <strong>Edit</strong>
+    <button type="button" id="btn-edit-toggle" class="active" title="Enable right-click move + connect">Edit mode ON</button>
+    <button type="button" id="btn-connect-mode">Connect lines</button>
+    <label>Snap
+      <input id="snap-size" type="number" min="1" max="50" value="10" style="width:3.5rem" />
+      px
+    </label>
+    <button type="button" id="btn-clear-links">Clear my lines</button>
+    <button type="button" id="btn-reset-layout">Reset positions</button>
+    <button type="button" id="btn-save-layout">Save layout</button>
+    <span class="hint">Right-click equipment to grab · drag · release to snap. In Connect mode, left-click part A then part B to draw a line. Right-click a line to delete it.</span>
+  </div>
 
   <div class="legend" aria-label="Fluid legend">
     <div class="legend-item"><span class="swatch sw"></span> Seawater / treated overboard</div>
@@ -1597,6 +1701,471 @@
   renderDynamic();
 })();
 </script>
+
+<script>
+(function () {
+  "use strict";
+
+  var editOn = true;
+  var connectOn = false;
+  var snap = 10;
+  var dragging = null;
+  var connectFrom = null;
+  var preview = null;
+  var layouts = loadLayouts();
+  var links = loadLinks();
+  var linkLayerBySvg = new WeakMap();
+  var idSeq = 1;
+
+  function $(id) { return document.getElementById(id); }
+
+  function loadLayouts() {
+    try { return JSON.parse(localStorage.getItem("msd-edit-layouts") || "{}"); }
+    catch (e) { return {}; }
+  }
+  function saveLayouts() {
+    localStorage.setItem("msd-edit-layouts", JSON.stringify(layouts));
+  }
+  function loadLinks() {
+    try { return JSON.parse(localStorage.getItem("msd-edit-links") || "{}"); }
+    catch (e) { return {}; }
+  }
+  function saveLinks() {
+    localStorage.setItem("msd-edit-links", JSON.stringify(links));
+  }
+
+  function snapVal(v) {
+    return Math.round(v / snap) * snap;
+  }
+
+  function ensureSvgId(svg, index) {
+    if (!svg.dataset.editSvgId) svg.dataset.editSvgId = "svg-" + index;
+    return svg.dataset.editSvgId;
+  }
+
+  function ensureNodeId(el) {
+    if (!el.dataset.editId) {
+      el.dataset.editId = "n" + (idSeq++);
+    }
+    return el.dataset.editId;
+  }
+
+  function svgPoint(svg, evt) {
+    var pt = svg.createSVGPoint();
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+    var ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    var p = pt.matrixTransform(ctm.inverse());
+    return { x: p.x, y: p.y };
+  }
+
+  function getTranslate(el) {
+    var t = el.getAttribute("transform") || "";
+    var m = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(t);
+    if (m) return { x: parseFloat(m[1]), y: parseFloat(m[2]), rest: t.replace(m[0], "").trim() };
+    return { x: 0, y: 0, rest: t };
+  }
+
+  function setTranslate(el, x, y, rest) {
+    var other = rest || "";
+    // strip existing translate
+    other = other.replace(/translate\(\s*[-\d.]+[ ,]+[-\d.]+\s*\)/g, "").trim();
+    var tr = "translate(" + x + " " + y + ")";
+    el.setAttribute("transform", other ? tr + " " + other : tr);
+  }
+
+  function isDraggableTarget(el) {
+    if (!el || el.ownerSVGElement == null) return null;
+    if (el.classList && (el.classList.contains("user-link") || el.classList.contains("user-link-hit") || el.classList.contains("connect-preview") || el.classList.contains("snap-ghost"))) {
+      return null;
+    }
+    // climb to a sensible node: prefer g with geometry, else shape
+    var cur = el;
+    while (cur && cur.tagName && cur.tagName.toLowerCase() !== "svg") {
+      var tag = cur.tagName.toLowerCase();
+      if (cur.dataset && cur.dataset.noEdit === "1") return null;
+      if (tag === "g" && cur.id === "beads4") return null;
+      if (tag === "g" && cur.id === "flows4") return null;
+      if (cur.querySelector && cur.querySelector("animateMotion")) {
+        // skip bead groups
+        cur = cur.parentNode;
+        continue;
+      }
+      if (tag === "g" || tag === "rect" || tag === "circle" || tag === "ellipse" || tag === "path" || tag === "polygon" || tag === "polyline" || tag === "text" || tag === "line") {
+        // Prefer wrapping single shapes into a group for transform stability when possible
+        return cur;
+      }
+      cur = cur.parentNode;
+    }
+    return null;
+  }
+
+  function wrapIfNeeded(el) {
+    var tag = el.tagName.toLowerCase();
+    if (tag === "g") return el;
+    // wrap shape in a group so translate works cleanly
+    var parent = el.parentNode;
+    if (!parent) return el;
+    var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    parent.insertBefore(g, el);
+    g.appendChild(el);
+    return g;
+  }
+
+  function nodeCenter(el, svg) {
+    try {
+      var bb = el.getBBox();
+      var tr = getTranslate(el);
+      return { x: bb.x + bb.width / 2 + tr.x, y: bb.y + bb.height / 2 + tr.y };
+    } catch (e) {
+      return { x: 0, y: 0 };
+    }
+  }
+
+  function ensureDefs(svg) {
+    var defs = svg.querySelector("defs");
+    if (!defs) {
+      defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      svg.insertBefore(defs, svg.firstChild);
+    }
+    if (!svg.querySelector("#edit-arrow")) {
+      var marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+      marker.setAttribute("id", "edit-arrow");
+      marker.setAttribute("viewBox", "0 0 10 10");
+      marker.setAttribute("refX", "9");
+      marker.setAttribute("refY", "5");
+      marker.setAttribute("markerWidth", "6");
+      marker.setAttribute("markerHeight", "6");
+      marker.setAttribute("orient", "auto-start-reverse");
+      var tip = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      tip.setAttribute("d", "M 0 1 L 10 5 L 0 9 z");
+      tip.setAttribute("fill", "var(--accent)");
+      marker.appendChild(tip);
+      defs.appendChild(marker);
+    }
+  }
+
+  function ensureLinkLayer(svg) {
+    var layer = linkLayerBySvg.get(svg);
+    if (layer && layer.parentNode) return layer;
+    layer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    layer.setAttribute("class", "user-links");
+    layer.setAttribute("data-no-edit", "1");
+    svg.appendChild(layer);
+    linkLayerBySvg.set(svg, layer);
+    return layer;
+  }
+
+  function applySavedLayout(svg) {
+    var sid = ensureSvgId(svg, 0);
+    var map = layouts[sid] || {};
+    Object.keys(map).forEach(function (nid) {
+      var el = svg.querySelector('[data-edit-id="' + nid + '"]');
+      if (!el) return;
+      var pos = map[nid];
+      var cur = getTranslate(el);
+      setTranslate(el, pos.x, pos.y, cur.rest);
+    });
+  }
+
+  function persistNode(svg, el) {
+    var sid = ensureSvgId(svg, 0);
+    var nid = ensureNodeId(el);
+    if (!layouts[sid]) layouts[sid] = {};
+    var tr = getTranslate(el);
+    layouts[sid][nid] = { x: tr.x, y: tr.y };
+  }
+
+  function redrawLinks(svg) {
+    var sid = ensureSvgId(svg, 0);
+    var layer = ensureLinkLayer(svg);
+    while (layer.firstChild) layer.removeChild(layer.firstChild);
+    var list = links[sid] || [];
+    list.forEach(function (link, idx) {
+      var a = svg.querySelector('[data-edit-id="' + link.from + '"]');
+      var b = svg.querySelector('[data-edit-id="' + link.to + '"]');
+      if (!a || !b) return;
+      var ca = nodeCenter(a, svg);
+      var cb = nodeCenter(b, svg);
+      var hit = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      hit.setAttribute("class", "user-link-hit");
+      hit.setAttribute("x1", ca.x);
+      hit.setAttribute("y1", ca.y);
+      hit.setAttribute("x2", cb.x);
+      hit.setAttribute("y2", cb.y);
+      hit.dataset.linkIndex = String(idx);
+      hit.addEventListener("contextmenu", function (evt) {
+        if (!editOn) return;
+        evt.preventDefault();
+        evt.stopPropagation();
+        links[sid].splice(idx, 1);
+        saveLinks();
+        redrawLinks(svg);
+      });
+      var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("class", "user-link");
+      line.setAttribute("x1", ca.x);
+      line.setAttribute("y1", ca.y);
+      line.setAttribute("x2", cb.x);
+      line.setAttribute("y2", cb.y);
+      line.setAttribute("marker-end", "url(#edit-arrow)");
+      layer.appendChild(hit);
+      layer.appendChild(line);
+    });
+  }
+
+  function clearSelection(svg) {
+    svg.querySelectorAll(".movable-selected").forEach(function (n) {
+      n.classList.remove("movable-selected");
+    });
+  }
+
+  function onContextMenu(evt) {
+    if (!editOn) return;
+    var svg = evt.currentTarget;
+    var t = isDraggableTarget(evt.target);
+    if (!t) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+
+    // right-click existing user link handled separately
+    if (evt.target.classList && evt.target.classList.contains("user-link-hit")) return;
+
+    t = wrapIfNeeded(t);
+    ensureNodeId(t);
+    clearSelection(svg);
+    t.classList.add("movable-selected");
+
+    var p = svgPoint(svg, evt);
+    var tr = getTranslate(t);
+    dragging = {
+      svg: svg,
+      el: t,
+      startX: p.x,
+      startY: p.y,
+      origX: tr.x,
+      origY: tr.y,
+      rest: tr.rest
+    };
+
+    // snap ghost
+    var ghost = svg.querySelector(".snap-ghost");
+    if (!ghost) {
+      ghost = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      ghost.setAttribute("class", "snap-ghost");
+      svg.appendChild(ghost);
+    }
+    try {
+      var bb = t.getBBox();
+      ghost.setAttribute("x", bb.x + tr.x);
+      ghost.setAttribute("y", bb.y + tr.y);
+      ghost.setAttribute("width", bb.width);
+      ghost.setAttribute("height", bb.height);
+    } catch (e) {}
+  }
+
+  function onPointerMove(evt) {
+    var svg = evt.currentTarget;
+    var p = svgPoint(svg, evt);
+
+    if (dragging && dragging.svg === svg) {
+      evt.preventDefault();
+      var dx = p.x - dragging.startX;
+      var dy = p.y - dragging.startY;
+      var nx = snapVal(dragging.origX + dx);
+      var ny = snapVal(dragging.origY + dy);
+      setTranslate(dragging.el, nx, ny, dragging.rest);
+      var ghost = svg.querySelector(".snap-ghost");
+      if (ghost) {
+        try {
+          var bb = dragging.el.getBBox();
+          var tr = getTranslate(dragging.el);
+          ghost.setAttribute("x", bb.x + tr.x);
+          ghost.setAttribute("y", bb.y + tr.y);
+        } catch (e) {}
+      }
+      redrawLinks(svg);
+      return;
+    }
+
+    if (connectOn && connectFrom && preview) {
+      var c = nodeCenter(connectFrom, svg);
+      preview.setAttribute("x1", c.x);
+      preview.setAttribute("y1", c.y);
+      preview.setAttribute("x2", p.x);
+      preview.setAttribute("y2", p.y);
+    }
+  }
+
+  function onPointerUp(evt) {
+    var svg = evt.currentTarget;
+    if (dragging && dragging.svg === svg) {
+      persistNode(svg, dragging.el);
+      saveLayouts();
+      redrawLinks(svg);
+      var ghost = svg.querySelector(".snap-ghost");
+      if (ghost) ghost.remove();
+      dragging = null;
+    }
+  }
+
+  function onClick(evt) {
+    if (!editOn || !connectOn) return;
+    if (evt.button !== 0) return;
+    var svg = evt.currentTarget;
+    var t = isDraggableTarget(evt.target);
+    if (!t) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    t = wrapIfNeeded(t);
+    var nid = ensureNodeId(t);
+    clearSelection(svg);
+    t.classList.add("movable-selected");
+
+    if (!connectFrom) {
+      connectFrom = t;
+      preview = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      preview.setAttribute("class", "connect-preview");
+      var c = nodeCenter(t, svg);
+      preview.setAttribute("x1", c.x);
+      preview.setAttribute("y1", c.y);
+      preview.setAttribute("x2", c.x);
+      preview.setAttribute("y2", c.y);
+      svg.appendChild(preview);
+      return;
+    }
+
+    if (connectFrom === t) return;
+    var sid = ensureSvgId(svg, 0);
+    if (!links[sid]) links[sid] = [];
+    links[sid].push({ from: ensureNodeId(connectFrom), to: nid });
+    saveLinks();
+    connectFrom = null;
+    if (preview) { preview.remove(); preview = null; }
+    clearSelection(svg);
+    redrawLinks(svg);
+  }
+
+  function bindSvg(svg, index) {
+    ensureSvgId(svg, index);
+    ensureDefs(svg);
+    ensureLinkLayer(svg);
+    svg.addEventListener("contextmenu", onContextMenu);
+    svg.addEventListener("pointermove", onPointerMove);
+    svg.addEventListener("pointerup", onPointerUp);
+    svg.addEventListener("pointerleave", onPointerUp);
+    svg.addEventListener("click", onClick, true);
+
+    // restore any known nodes by scanning saved ids after a tick (diagram 4 builds async)
+    applySavedLayout(svg);
+    redrawLinks(svg);
+  }
+
+  function allSvgs() {
+    return Array.prototype.slice.call(document.querySelectorAll(".diagram-card svg"));
+  }
+
+  function setEditVisual() {
+    allSvgs().forEach(function (svg) {
+      var card = svg.closest(".diagram-card");
+      if (card) card.classList.toggle("edit-enabled", editOn);
+    });
+    var btn = $("btn-edit-toggle");
+    if (btn) {
+      btn.textContent = editOn ? "Edit mode ON" : "Edit mode OFF";
+      btn.classList.toggle("active", editOn);
+    }
+    var cbtn = $("btn-connect-mode");
+    if (cbtn) cbtn.classList.toggle("active", connectOn && editOn);
+  }
+
+  function boot() {
+    allSvgs().forEach(bindSvg);
+    setEditVisual();
+
+    // Diagram 4 rebuilds content — re-apply after a short delay and on toolbar preset clicks
+    setTimeout(function () {
+      allSvgs().forEach(function (svg, i) {
+        applySavedLayout(svg);
+        redrawLinks(svg);
+      });
+    }, 50);
+
+    ["btn-reset", "btn-process", "btn-flush"].forEach(function (id) {
+      var b = $(id);
+      if (!b) return;
+      b.addEventListener("click", function () {
+        setTimeout(function () {
+          var svg = document.getElementById("diagram4");
+          if (!svg) return;
+          ensureLinkLayer(svg);
+          applySavedLayout(svg);
+          redrawLinks(svg);
+        }, 30);
+      });
+    });
+  }
+
+  $("btn-edit-toggle").addEventListener("click", function () {
+    editOn = !editOn;
+    if (!editOn) {
+      connectOn = false;
+      connectFrom = null;
+      if (preview) { preview.remove(); preview = null; }
+      dragging = null;
+    }
+    setEditVisual();
+  });
+
+  $("btn-connect-mode").addEventListener("click", function () {
+    if (!editOn) editOn = true;
+    connectOn = !connectOn;
+    connectFrom = null;
+    if (preview) { preview.remove(); preview = null; }
+    setEditVisual();
+  });
+
+  $("snap-size").addEventListener("change", function () {
+    var v = parseInt($("snap-size").value, 10);
+    if (!isFinite(v) || v < 1) v = 10;
+    snap = v;
+  });
+
+  $("btn-clear-links").addEventListener("click", function () {
+    links = {};
+    saveLinks();
+    allSvgs().forEach(redrawLinks);
+  });
+
+  $("btn-reset-layout").addEventListener("click", function () {
+    layouts = {};
+    saveLayouts();
+    allSvgs().forEach(function (svg) {
+      svg.querySelectorAll("[data-edit-id]").forEach(function (el) {
+        var tr = getTranslate(el);
+        setTranslate(el, 0, 0, tr.rest);
+        el.classList.remove("movable-selected");
+      });
+      redrawLinks(svg);
+    });
+  });
+
+  $("btn-save-layout").addEventListener("click", function () {
+    saveLayouts();
+    saveLinks();
+    alert("Layout and connections saved in this browser.");
+  });
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    // diagram 4 script may run after this if order wrong — delay slightly
+    setTimeout(boot, 0);
+  }
+})();
+</script>
+
 </body>
 </html>
 
