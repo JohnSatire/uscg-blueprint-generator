@@ -204,6 +204,14 @@ export default function App() {
           >
             MSD package
           </a>
+          <a
+            className="msd-link"
+            href={`${import.meta.env.BASE_URL}docs/MSD-System-Explanation.docx`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            MSD Word doc
+          </a>
           <button type="button" className="primary" onClick={downloadDxf}>
             Export DXF
           </button>

@@ -34,6 +34,12 @@ npm run preview
 
 Share a live link with **Share link** (drawing state in the URL hash) or pass the JSON file to collaborators.
 
+## MSD system write-up
+
+- Word document: [`docs/MSD-System-Explanation.docx`](docs/MSD-System-Explanation.docx) (also on Pages at `/docs/MSD-System-Explanation.docx`)
+- Interactive Diagram 4 editor: `/msd-editor.html`
+- Annotated diagrams package: `/msd-line-diagrams.html`
+
 ## Stack
 
 React + TypeScript + Vite, SVG editor, custom ASCII DXF writer, jsPDF for PDF.
