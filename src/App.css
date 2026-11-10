@@ -143,6 +143,22 @@ textarea {
   display: flex;
   gap: 0.35rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.export-group .msd-link {
+  display: inline-block;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.export-group .msd-link:hover {
+  background: rgba(61, 122, 181, 0.15);
 }
 
 .workspace {
